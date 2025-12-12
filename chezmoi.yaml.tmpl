@@ -1,0 +1,44 @@
+# ===============================
+#      Chezmoi Configuration
+# ===============================
+
+# Utilise ~/.chezmoitemplates/ pour les templates
+templateDir: .chezmoitemplates
+
+# Active le mode strict dans les templates (meilleure sécurité)
+templateOptions:
+  options:
+    missingkey: error
+
+# Emplacement des sources
+sourceDir: ~/.local/share/chezmoi
+
+# Appliquer automatiquement les modifications après chaque "chezmoi add"
+add:
+  autoCommit: true
+  autoPush: true
+
+# Config spécifique par OS
+# Ici Homebrew sur macOS + Linuxbrew
+data:
+  os:
+    linux:
+      use_brew: true
+
+# Exécution automatique de scripts
+# (tu peux ajouter run_before_ ou run_after_)
+script:
+  shell: zsh
+
+# Gestion de Git
+git:
+  autoCommit: true
+  autoPush: true
+  # Propre, évite les fichiers parasites
+  exclude:
+    - '*.swp'
+    - '*.tmp'
+    - '.DS_Store'
+
+# Désactive l'impression trop verbeuse
+verbose: false
