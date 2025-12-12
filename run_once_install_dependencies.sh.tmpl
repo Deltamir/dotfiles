@@ -1,0 +1,74 @@
+#!/bin/sh
+set -eu
+
+# ============================================================
+#   1) Install git if missing
+# ============================================================
+if ! command -v git >/dev/null 2>&1; then
+  echo "[chezmoi] Installing git..."
+  if command -v apt-get >/dev/null 2>&1; then
+    sudo apt-get update -y
+    sudo apt-get install -y git
+  elif command -v dnf >/dev/null 2>&1; then
+    sudo dnf install -y git
+  elif command -v pacman >/dev/null 2>&1; then
+    sudo pacman -Sy --noconfirm git
+  fi
+fi
+
+# ============================================================
+#   2) Install Zsh if missing
+# ============================================================
+if ! command -v zsh >/dev/null 2>&1; then
+  echo "[chezmoi] Installing zsh..."
+  if command -v apt-get >/dev/null 2>&1; then
+    sudo apt-get install -y zsh
+  elif command -v dnf >/dev/null 2>&1; then
+    sudo dnf install -y zsh
+  elif command -v pacman >/dev/null 2>&1; then
+    sudo pacman -Sy --noconfirm zsh
+  fi
+fi
+
+# Ensure the default shell is Zsh
+if [ "$SHELL" != "$(command -v zsh)" ]; then
+  echo "[chezmoi] Setting Zsh as default shell..."
+  chsh -s "$(command -v zsh)" || true
+fi
+
+# ============================================================
+#   3) Install Oh-My-Zsh (only if missing)
+# ============================================================
+if [ ! -d "{{ .chezmoi.homeDir }}/.oh-my-zsh" ]; then
+  echo "[chezmoi] Installing Oh My Zsh..."
+  git clone https://github.com/ohmyzsh/ohmyzsh.git "{{ .chezmoi.homeDir }}/.oh-my-zsh"
+fi
+
+# ============================================================
+#   4) Install Homebrew (Linux or macOS)
+# ============================================================
+if ! command -v brew >/dev/null 2>&1; then
+  echo "[chezmoi] Installing Homebrew..."
+
+  NONINTERACTIVE=1 bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+  # Add brew to path depending on OS
+  if [ -d "/home/linuxbrew/.linuxbrew" ]; then
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+  elif [ -d "/opt/homebrew" ]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  fi
+fi
+
+# ============================================================
+#   5) Make brew available in current session
+# ============================================================
+if command -v brew >/dev/null 2>&1; then
+  if [ -d "/home/linuxbrew/.linuxbrew" ]; then
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+  elif [ -d "/opt/homebrew" ]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  fi
+fi
+
+echo "[chezmoi] Dependencies installed."
