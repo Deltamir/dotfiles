@@ -1,0 +1,8 @@
+#!/bin/sh
+
+OMZ="{{ .chezmoi.homeDir }}/.oh-my-zsh"
+
+if [ ! -d "$OMZ" ]; then
+  RUNZSH=no CHSH=no \
+  sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+fi

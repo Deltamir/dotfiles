@@ -1,0 +1,24 @@
+#!/bin/sh
+
+# Wrapper sudo portable
+if command -v sudo >/dev/null 2>&1; then
+  SUDO="sudo"
+else
+  SUDO=""
+fi
+
+# --- Install OS packages -----------------------------------------------------
+
+if command -v apt-get >/dev/null 2>&1; then
+  $SUDO apt-get update -y
+  $SUDO apt-get install -y git curl zsh
+fi
+
+if command -v dnf >/dev/null 2>&1; then
+  $SUDO dnf install -y git curl zsh
+fi
+
+if command -v pacman >/dev/null 2>&1; then
+  $SUDO pacman -Sy --noconfirm git curl zsh
+fi
+
