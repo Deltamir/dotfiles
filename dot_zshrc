@@ -1,5 +1,6 @@
 # Path to Oh My Zsh
 export ZSH="$HOME/.oh-my-zsh"
+export ZSH_CUSTOM="$HOME/.zsh-custom"
 
 
 # Theme fallback (real prompt in $ZSH_CUSTOM/prompt.zsh)
