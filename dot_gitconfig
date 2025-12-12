@@ -1,0 +1,18 @@
+[user]
+	name = Deltamir
+	email = deltamir@hotmail.fr
+
+[credential "https://github.com"]
+	helper = 
+	helper = !/home/linuxbrew/.linuxbrew/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper = 
+	helper = !/home/linuxbrew/.linuxbrew/bin/gh auth git-credential
+[credential "https://gitlab.com"]
+	helper = 
+	helper = !/home/linuxbrew/.linuxbrew/Cellar/glab/1.79.0/bin/glab auth git-credential
+
+[color]
+    diff = auto
+    status = auto
+    branch = auto
