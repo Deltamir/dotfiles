@@ -1,8 +1,22 @@
 #!/bin/sh
 
 OMZ="{{ .chezmoi.homeDir }}/.oh-my-zsh"
+OMZ_CORE="$OMZ/oh-my-zsh.sh"
 
-if [ ! -d "$OMZ" ]; then
-  RUNZSH=no CHSH=no \
-  sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+# Détecter si OMZ est vraiment installé 
+if [ -f "$OMZ_CORE" ]; then
+  echo "Oh-My-Zsh already installed, skipping."
+  exit 0
 fi
+
+echo "Installing Oh-My-Zsh..."
+
+# Installer OMZ sans lancer zsh et sans remplacer ~/.zshrc
+RUNZSH=no CHSH=no KEEP_ZSHRC=yes \
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+
+# HM—force OMZ to create missing structure, so chezmoi custom files land safely
+mkdir -p "$OMZ/custom/plugins"
+mkdir -p "$OMZ/custom/themes"
+
+echo "Oh-My-Zsh install complete."
