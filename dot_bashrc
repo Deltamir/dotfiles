@@ -1,0 +1,8 @@
+# Only minimal configuration
+export PATH="$HOME/.local/bin:$PATH"
+alias ll="ls -lah"
+
+# Optional: auto-switch to zsh if installed
+if command -v zsh >/dev/null 2>&1; then
+    exec zsh
+fi

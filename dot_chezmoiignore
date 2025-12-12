@@ -1,0 +1,15 @@
+.cache/
+.local/
+.mozilla/
+Downloads/
+Documents/
+Music/
+Pictures/
+Videos/
+Templates/
+Public/
+Desktop/
+.qterminal/
+.zsh_history
+.bash_history
+.vboxclient-*
