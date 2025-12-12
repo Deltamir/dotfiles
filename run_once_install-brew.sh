@@ -6,7 +6,7 @@ echo "==> Installation de Homebrew…"
 # Détermine si Homebrew est déjà installé
 if ! command -v brew >/dev/null 2>&1; then
   # Linux
-  else
+  if [[ "$OSTYPE" == "linux"* ]]; then
     echo "→ Installation Linuxbrew"
     NONINTERACTIVE=1 /bin/bash -c \
       "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
