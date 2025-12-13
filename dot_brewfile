@@ -1,0 +1,17 @@
+
+# DevOps Tools
+brew "gh"
+brew "glab"
+
+# Languages
+brew "npm"
+brew "yarn"
+brew "pipx"
+
+# Cloud providers
+brew "awscli"
+brew "kubectl"
+
+# Tools
+brew "jq"
+brew "nano"
