@@ -1,0 +1,31 @@
+#!/bin/sh
+set -eu
+
+BREWFILE="{{ .chezmoi.homeDir }}/.Brewfile"
+
+# Ne rien faire si Brewfile absent
+if [ ! -f "$BREWFILE" ]; then
+  echo "No Brewfile found, skipping brew bundle"
+  exit 0
+fi
+
+# Détection de brew
+if command -v brew >/dev/null 2>&1; then
+  BREW="$(command -v brew)"
+elif [ -x "/home/linuxbrew/.linuxbrew/bin/brew" ]; then
+  BREW="/home/linuxbrew/.linuxbrew/bin/brew"
+elif [ -x "/opt/homebrew/bin/brew" ]; then
+  BREW="/opt/homebrew/bin/brew"
+elif [ -x "/usr/local/bin/brew" ]; then
+  BREW="/usr/local/bin/brew"
+else
+  echo "Homebrew not found, skipping Brewfile install"
+  exit 0
+fi
+
+echo "Using brew at: $BREW"
+
+export HOMEBREW_NO_ENV_HINTS=1
+
+echo "Installing Brewfile packages..."
+"$BREW" bundle --file="$BREWFILE"
