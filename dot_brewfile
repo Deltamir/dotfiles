@@ -2,11 +2,17 @@
 # DevOps Tools
 brew "gh"
 brew "glab"
+tap "hashicorp/tap"
+brew "hashicorp/tap/vault"
+brew "terraform"
 
 # Languages
 brew "npm"
 brew "yarn"
 brew "pipx"
+brew "python"
+brew "pipx", args: ["install", "uv"]
+
 
 # Cloud providers
 brew "awscli"
@@ -14,4 +20,13 @@ brew "kubectl"
 
 # Tools
 brew "jq"
+brew "yq"
+brew "ent"
+brew "screen"
 brew "nano"
+brew "gpg"
+brew "docker"
+
+# ZSH
+brew "zsh-autosuggestions"
+brew "zsh-syntax-highlighting"
