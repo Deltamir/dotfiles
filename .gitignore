@@ -1,0 +1,22 @@
+# Never commit these, whatever `git add` is run (public repo, pushed from audit VMs).
+# Shell histories
+.zsh_history
+.bash_history
+*_history
+# Credentials and keys
+.aws/credentials
+credentials
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+.ssh/
+.env
+.env.*
+# Machine-specific files (local overrides, e.g. AWS profiles, account IDs)
+*.local
+*.local.*
+# Editor and OS noise
+*.swp
+*.tmp
+.DS_Store

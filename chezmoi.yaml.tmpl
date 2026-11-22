@@ -13,11 +13,6 @@ templateOptions:
 # Emplacement des sources
 sourceDir: ~/.local/share/chezmoi
 
-# Appliquer automatiquement les modifications après chaque "chezmoi add"
-add:
-  autoCommit: true
-  autoPush: true
-
 # Config spécifique par OS
 # Ici Homebrew sur macOS + Linuxbrew
 data:
@@ -31,10 +26,9 @@ script:
   shell: zsh
 
 # Gestion de Git
+# Pas d'autoCommit / autoPush : ce repo est public et poussé depuis des
+# machines d'audit ; rien ne doit partir sans relecture du diff.
 git:
-  autoCommit: true
-  autoPush: true
-  # Propre, évite les fichiers parasites
   exclude:
     - '*.swp'
     - '*.tmp'
