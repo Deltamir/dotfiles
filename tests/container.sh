@@ -51,7 +51,12 @@ as 'grep -rnE "(^|[[:space:]\"=:!])/(home|root)/" ~/.dotfiles/home ~/.dotfiles/c
 if [ "$MODE" = sudo ]; then
   as 'zsh -ic "command -v gh && echo zsh-ok"' 2>&1 | tail -2 | grep -q zsh-ok || fail "zsh with mise tools"
   # Kali-like shell on every distribution: the two-line prompt and the plugins.
-  as 'zsh -ic "print -r -- \$PROMPT"' 2>/dev/null | grep -q "㉿" || fail "Kali-style prompt"
+  # One symbol per kind of machine (home/zsh/prompt.zsh). WSL and VS Code set
+  # the variables in the terminal's environment; here they are set by hand.
+  sym() { as "$1 zsh -ic 'print -r -- \$PROMPT'" 2>/dev/null | grep -q "┌──.*$2" || fail "prompt symbol $2 ($1)"; }
+  if grep -qx 'ID=kali' /etc/os-release; then sym "" "㉿"; else sym "" "@"; fi
+  sym "REMOTE_CONTAINERS=true" "⬢"
+  sym "WSL_DISTRO_NAME=Debian" "⊞"
   as 'zsh -ic "(( \$+functions[_zsh_autosuggest_start] )) && (( \$+functions[_zsh_highlight] )) && echo plugins-ok"' 2>/dev/null | grep -q plugins-ok || fail "zsh plugins"
   # Kali behaviours that Oh My Zsh would otherwise change: Ctrl+P prompt
   # toggle, Kali's highlighting colours, one history per terminal.
