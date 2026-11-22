@@ -3,7 +3,10 @@
 # (dotfiles.installCommand), WSL by hand, the Sarasvati VM. Re-running it only
 # changes what differs from the config.
 #
-#   ./install.sh
+#   ./install.sh          install or update; any error is fatal
+#   ./install.sh --sync   at login (dotfiles-sync unit): pull the repository first
+#                         when nothing is modified locally; never fails the login,
+#                         a network error is logged and the local version is kept
 #
 # What it does:
 #   1. install mise (pinned version, checksum verified) into ~/.local/bin
@@ -22,11 +25,54 @@ declare -A MISE_SHA256=(
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles"
 BIN="$HOME/.local/bin"
+MODE="${1:-install}"
 mkdir -p "$STATE" "$BIN"
-exec > >(tee -a "$STATE/install.log") 2>&1
-echo "=== install.sh $(date -u +%FT%TZ) repo=$REPO user=$(id -un)"
 
 log() { echo "[dotfiles] $*"; }
+
+case "$MODE" in
+  install | --sync-run | --sync-pulled) ;;
+  --sync)
+    # Login must never fail because of the dotfiles: run the real sync in a
+    # child process, log its failure, return 0.
+    rc=0
+    "$REPO/install.sh" --sync-run || rc=$?
+    [ "$rc" -eq 0 ] || log "sync failed (exit $rc): the local version stays in place, see $STATE/install.log"
+    exit 0
+    ;;
+  *) echo "usage: $0 [--sync]" >&2; exit 2 ;;
+esac
+
+# Once per run: the --sync-run -> --sync-pulled exec keeps the same log pipe.
+if [ -z "${DOTFILES_LOG_OPEN:-}" ]; then
+  export DOTFILES_LOG_OPEN=1
+  exec > >(tee -a "$STATE/install.log") 2>&1
+fi
+echo "=== install.sh $MODE $(date -u +%FT%TZ) repo=$REPO user=$(id -un)"
+
+# --- 0. sync: pull, then restart on the pulled version ---------------------------
+if [ "$MODE" = --sync-run ]; then
+  # Network steps get short timeouts: on a client network without Internet the
+  # login goes on with the local version.
+  export MISE_HTTP_TIMEOUT=20s MISE_FETCH_REMOTE_VERSIONS_TIMEOUT=20s
+  export PATH="$BIN:$PATH"
+  # An application that rewrote a copied file (gh, aws) would lose its change
+  # when the copy is applied again: bring those changes into the repository
+  # first. They then count as local changes, like any edit through a link.
+  if command -v mise >/dev/null 2>&1; then
+    mise dot add --changed --yes || log "could not capture rewritten copies"
+  fi
+  if [ -n "$(git -C "$REPO" status --porcelain)" ]; then
+    log "local changes in $REPO: pull skipped (publish them with: mise run push)"
+  elif timeout 20 git -C "$REPO" pull --ff-only -q; then
+    log "pulled $(git -C "$REPO" log -1 --format='%h %s')"
+  else
+    log "pull failed or not a fast-forward: keeping the local version"
+  fi
+  # install.sh itself may have changed: bash reads a script while running it,
+  # so continue in a fresh process on the pulled file.
+  exec "$REPO/install.sh" --sync-pulled
+fi
 
 # A real file or directory where a link must go is moved aside, never deleted.
 backup() {
@@ -61,7 +107,7 @@ install_mise() {
   tarball="mise-v${MISE_VERSION}-linux-${arch}.tar.gz"
   tmp="$(mktemp -d)"
   log "installing mise $MISE_VERSION ($arch)"
-  curl -fsSL --retry 3 -o "$tmp/$tarball" \
+  curl -fsSL --retry 3 --max-time 120 -o "$tmp/$tarball" \
     "https://github.com/jdx/mise/releases/download/v${MISE_VERSION}/${tarball}"
   echo "${MISE_SHA256[$arch]}  $tmp/$tarball" | sha256sum -c --quiet -
   tar -xzf "$tmp/$tarball" -C "$tmp"
@@ -82,6 +128,10 @@ link "${XDG_CONFIG_HOME:-$HOME/.config}/mise" "$REPO/config/mise"
 
 # --- 3. bootstrap ---------------------------------------------------------------
 args=(--yes --force-dotfiles)
+if [ "$MODE" = --sync-pulled ]; then
+  # Applying the units from inside dotfiles-sync would stop dotfiles-sync.
+  args+=(--skip linux-systemd-units)
+fi
 if [ "$(id -u)" -eq 0 ] || sudo -n true 2>/dev/null; then
   log "passwordless sudo: system packages included"
 elif [ -t 0 ]; then

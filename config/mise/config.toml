@@ -63,6 +63,7 @@ docker-cli = "latest"
 uv = "latest"
 node = "lts"
 yarn = "latest"
+gitleaks = "latest"     # secret scan of `mise run push`
 
 # --- Checks ----------------------------------------------------------------------
 # Runs at the end of every `mise bootstrap`: each tool must answer, as the
@@ -81,4 +82,72 @@ run = [
   "uv --version",
   "node --version",
   "yarn --version",
+  "gitleaks version",
 ]
+
+# --- Publishing changes ------------------------------------------------------------
+# `mise run push`: the only way a change leaves this machine. Brings back the
+# copies an application rewrote, shows the full diff, scans it for secrets
+# (any finding stops everything), asks, then commits and pushes.
+[tasks.push]
+description = "Review, scan and publish the local dotfiles changes"
+dir = "{{ env.HOME }}/.dotfiles"
+raw = true
+run = '''
+set -eu
+mise dot add --changed --yes
+git add -A
+if git diff --cached --quiet; then
+  echo "Nothing to publish."
+  exit 0
+fi
+git --no-pager diff --cached
+echo
+git --no-pager diff --cached --stat
+if ! gitleaks git --staged --pre-commit --redact --no-banner .; then
+  echo "gitleaks found a possible secret: nothing was committed. Fix it, then run again." >&2
+  git reset -q
+  exit 1
+fi
+printf 'Commit and push these changes? [y/N] '
+read -r answer
+case "$answer" in
+  y | Y | yes | o | oui) ;;
+  *) echo "Cancelled; the changes stay staged."; exit 1 ;;
+esac
+git commit -q -m "dotfiles: changes from $(hostname)"
+if ! git pull --rebase -q; then
+  echo "Another machine changed the same lines. Resolve in ~/.dotfiles (git status)," >&2
+  echo "then: git rebase --continue && git push" >&2
+  exit 1
+fi
+git push -q
+echo "Published."
+'''
+
+# --- Background jobs (systemd user units; skipped where there is no user manager,
+# such as containers, or WSL without systemd=true in /etc/wsl.conf) ---------------
+# At login: pull the repository if nothing is modified locally, then apply it.
+# start = false: applying the config must not run it (it would apply again).
+[bootstrap.linux.systemd.units.dotfiles-sync]
+description = "Pull and apply the dotfiles (install.sh --sync)"
+type = "oneshot"
+exec_start = "~/.dotfiles/install.sh --sync"
+timeout_start_sec = "900"
+start = false
+
+# Weekly: upgrade the tools in [tools] (what `brew upgrade` used to do).
+[bootstrap.linux.systemd.units.mise-upgrade]
+description = "Upgrade the mise tools"
+type = "oneshot"
+exec_start = "~/.local/bin/mise upgrade"
+working_directory = "~"
+start = false
+wanted_by = []
+
+[bootstrap.linux.systemd.units.mise-upgrade-weekly]
+description = "Weekly mise upgrade"
+on_calendar = "weekly"
+persistent = true
+randomized_delay_sec = "1h"
+unit = "mise-upgrade"

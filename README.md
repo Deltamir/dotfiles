@@ -56,10 +56,15 @@ jamais supprimé.
 
 ## Au quotidien
 
+Rien ne part jamais tout seul : une modification faite sur une machine reste
+dans sa copie du repo jusqu'à `mise run push`.
+
 | Situation | Quoi faire |
 |---|---|
-| Modifier `~/.zshrc`, un alias de `~/.zsh-custom/` | c'est un lien : tu modifies le fichier du repo, il reste à commiter |
-| Une appli réécrit sa config (`~/.config/gh/config.yml`, `~/.aws/config`) | fichiers en `copy` : `mise dot add --changed` rapatrie les modifs dans `home/` |
+| Modifier `~/.zshrc`, un alias de `~/.zsh-custom/` | c'est un lien : tu modifies le fichier du repo ; `mise run push` pour le publier |
+| Une appli réécrit sa config (`~/.config/gh/config.yml`, `~/.aws/config`) | fichiers en `copy` : rapatriés dans `home/` par `mise run push` (ou `mise dot add --changed`) et à chaque synchronisation |
+| Publier les changements de cette machine | `mise run push` : diff complet, scan gitleaks (le moindre résultat arrête tout), confirmation, commit au nom de la machine, `pull --rebase`, push |
+| Récupérer les changements faits ailleurs | automatique à l'ouverture de session si rien n'est modifié localement ; sinon `mise run push` d'abord |
 | Suivre un nouveau fichier | l'ajouter dans `home/` et une ligne dans `[dotfiles]` de `config/mise/config.toml` |
 | Ajouter un outil | une ligne dans `[tools]`, une vérification dans `[tasks.bootstrap]` |
 | Voir ce qui diverge | `mise dot status`, `mise bootstrap status` |
@@ -67,6 +72,39 @@ jamais supprimé.
 
 Ce qui ne vaut que pour une machine va dans `config/mise/config.local.toml`
 (ignoré par Git), lu par mise en plus de `config.toml`.
+
+## En arrière-plan (systemd utilisateur)
+
+Déclarées dans `config.toml` (`[bootstrap.linux.systemd.units]`) et posées par
+`install.sh` :
+
+| Unité | Quand | Quoi |
+|---|---|---|
+| `dev.mise.dotfiles-sync.service` | ouverture de session | `install.sh --sync` : `git pull --ff-only` seulement si la copie locale n'a aucune modification, puis applique la config. Délai de 20 s sur le réseau ; une erreur est journalisée et la session continue avec la version locale |
+| `dev.mise.mise-upgrade-weekly.timer` | chaque semaine (rattrapé au démarrage si la machine était éteinte) | `mise upgrade` des outils de `[tools]` |
+
+Journal : `~/.local/state/dotfiles/install.log`, et
+`journalctl --user -u dev.mise.dotfiles-sync`. Sans gestionnaire systemd
+utilisateur (conteneurs, WSL sans systemd), ces unités sont sautées : sur WSL,
+mettre `[boot]` puis `systemd=true` dans `/etc/wsl.conf` et redémarrer WSL
+(`wsl --shutdown`). Dans un devcontainer, VS Code relance `install.sh` à chaque
+création, ce qui suffit.
+
+### Pousser depuis une VM d'audit
+
+Ne jamais y mettre ton token GitHub complet. Une clé de déploiement par VM,
+limitée à ce repo :
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/dotfiles_deploy -N "" -C "dotfiles $(hostname)"
+# GitHub > Deltamir/dotfiles > Settings > Deploy keys > Add, "Allow write access"
+git -C ~/.dotfiles remote set-url origin git@github.com:Deltamir/dotfiles.git
+git -C ~/.dotfiles config core.sshCommand "ssh -i ~/.ssh/dotfiles_deploy -o IdentitiesOnly=yes"
+```
+
+Supprimer la clé (sur GitHub et sur la VM) en fin de mission. Sans clé :
+`git -C ~/.dotfiles format-patch origin/main` puis appliquer le patch depuis
+ton poste.
 
 ## Choix et limites
 
@@ -92,7 +130,14 @@ Ce qui ne vaut que pour une machine va dans `config/mise/config.local.toml`
 `vscode`) et Debian sans sudo. Le second passage ne doit rien changer. Le
 test vérifie aussi les liens, le rendu du template, les droits de
 `~/.aws/config`, la sauvegarde du `~/.bashrc` d'origine, l'absence de chemin de
-home en dur et, dans zsh, que les outils de mise sont dans le PATH. `secrets.yml`
-lance gitleaks sur tout l'historique.
+home en dur et, dans zsh, que les outils de mise sont dans le PATH, le prompt et
+les comportements de Kali. Sur Debian, Kali et le devcontainer, il joue aussi la
+synchronisation et la publication contre un dépôt local qui tient lieu de
+GitHub : un changement fait ailleurs arrive, une modification locale survit,
+une copie réécrite par une appli est conservée, un faux token GitHub bloque
+`mise run push`, une publication passe après rebase, et un dépôt injoignable
+laisse `--sync` sortir en 0. Les unités systemd ne sont pas testées en CI (pas
+de systemd dans ces conteneurs). `secrets.yml` lance gitleaks sur tout
+l'historique.
 
 En local (Docker) : `tests/container.sh debian:stable sudo`.
