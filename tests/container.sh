@@ -31,7 +31,13 @@ else
   apt-get install -y -qq --no-install-recommends libatomic1 >/dev/null
 fi
 home=$(getent passwd "$U" | cut -d: -f6)
-cp -r /src "$home/dotfiles" && chown -R "$U:" "$home/dotfiles"
+# A local bare repository stands in for GitHub: the user's checkout is a
+# clone of it, so pull and push work as on a real machine.
+cp -r /src /tmp/seed && rm -rf /tmp/seed/.git
+git -C /tmp/seed init -q -b main && git -C /tmp/seed add -A
+git -C /tmp/seed -c user.name=ci -c user.email=ci@example.invalid commit -qm seed
+git clone -q --bare /tmp/seed /srv/origin.git && chown -R "$U:" /srv/origin.git
+su - "$U" -c "git clone -q /srv/origin.git ~/dotfiles"
 run() { su - "$U" -c "cd ~ && ./dotfiles/install.sh"; }
 echo "##### run 1"; run
 echo "##### run 2"; run 2>&1 | tee /tmp/run2.log
@@ -67,5 +73,58 @@ else
   grep -q "system packages skipped" /tmp/run2.log || fail "no-sudo message"
   as 'bash -ic "command -v gh"' >/dev/null 2>&1 || fail "tools without sudo"
 fi
+
+if [ "$MODE" = sudo ]; then
+  echo "##### sync and push"
+  # Another machine publishes a change.
+  git config --global --add safe.directory '*'   # root works in the user's repositories
+  upstream() {
+    if [ -d /tmp/other ]; then git -C /tmp/other pull -q; else git clone -q /srv/origin.git /tmp/other; fi
+    echo "$1" >> /tmp/other/home/zsh/aliases.zsh
+    git -C /tmp/other -c user.name=ci -c user.email=ci@example.invalid commit -qam "$1"
+    git -C /tmp/other push -q
+    chown -R "$U:" /srv/origin.git
+  }
+  upstream "alias from_elsewhere=true"
+  as '~/dotfiles/install.sh --sync' >/tmp/sync1.log 2>&1 || fail "sync exit code"
+  as 'grep -q from_elsewhere ~/.zsh-custom/aliases.zsh' || fail "sync did not pull a clean checkout"
+
+  # A local edit (through the ~/.zshrc link) survives the next sync.
+  as 'echo "# local edit" >> ~/.zshrc'
+  upstream "alias second=true"
+  as '~/dotfiles/install.sh --sync' >/tmp/sync2.log 2>&1 || fail "sync exit code"
+  as 'grep -q "# local edit" ~/.zshrc' || fail "local edit lost by sync"
+  grep -q "pull skipped" /tmp/sync2.log || fail "sync pulled over local changes"
+
+  # An application rewrites a copied file: the change is kept, in the repository.
+  as 'echo "# set by gh" >> ~/.config/gh/config.yml'
+  as '~/dotfiles/install.sh --sync' >/dev/null 2>&1 || fail "sync exit code"
+  as 'grep -q "set by gh" ~/.config/gh/config.yml && grep -q "set by gh" ~/dotfiles/home/config/gh/config.yml' || fail "copied file change lost"
+
+  # A fake secret stops `mise run push`: nothing committed, nothing pushed.
+  before=$(git -C /srv/origin.git rev-parse main)
+  # A realistic random token: gitleaks ignores low-entropy ones such as ghp_aaaa...
+  token="ghp_$(head -c 300 /dev/urandom | base64 -w0 | tr -dc 'A-Za-z0-9' | cut -c1-36)"
+  as "echo 'export GITHUB_TOKEN=$token' >> ~/.zsh-custom/aliases.zsh"
+  as 'cd ~ && echo y | mise run push' >/tmp/push1.log 2>&1 && fail "push accepted a secret"
+  grep -q "possible secret" /tmp/push1.log || { cat /tmp/push1.log; fail "no secret message"; }
+  [ "$(git -C /srv/origin.git rev-parse main)" = "$before" ] || fail "secret reached the remote"
+  as 'cd ~/dotfiles && git checkout -q -- home/zsh/aliases.zsh'
+
+  # Without the secret: published, with the machine name, after a rebase.
+  upstream "alias third=true"
+  as 'cd ~ && echo y | mise run push' >/tmp/push2.log 2>&1 || { cat /tmp/push2.log; fail "push"; }
+  git -C /srv/origin.git log -1 --format=%s main | grep -q "changes from" || fail "push did not reach the remote"
+  git -C /srv/origin.git show main:home/zshrc | grep -q "# local edit" || fail "local edit not published"
+  as 'test -z "$(git -C ~/dotfiles status --porcelain)"' || fail "checkout not clean after push"
+
+  # Offline (unreachable origin): the sync still exits 0, quickly, and says so.
+  as 'git -C ~/dotfiles remote set-url origin http://10.255.255.1/none.git'
+  start=$(date +%s)
+  as '~/dotfiles/install.sh --sync' >/tmp/sync4.log 2>&1 || fail "offline sync must exit 0"
+  [ $(( $(date +%s) - start )) -lt 120 ] || fail "offline sync too slow"
+  grep -q "keeping the local version" /tmp/sync4.log || fail "offline sync message"
+fi
+
 echo "ALL CHECKS PASSED ($MODE, $U)"
 IN
