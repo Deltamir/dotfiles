@@ -1,0 +1,14 @@
+# Only minimal configuration
+export PATH="$HOME/.local/bin:$PATH"
+alias ll="ls -lah"
+
+# mise: tools from ~/.config/mise/config.toml
+if command -v mise >/dev/null 2>&1; then
+  eval "$(mise activate bash)"
+fi
+
+# Interactive shells only switch to zsh: `ssh host cmd` and scripts that
+# source this file must keep running bash.
+case $- in
+  *i*) command -v zsh >/dev/null 2>&1 && exec zsh ;;
+esac
