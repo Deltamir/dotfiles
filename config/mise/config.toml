@@ -1,0 +1,84 @@
+# Global mise config for every machine: WSL, devcontainers, the Sarasvati VM.
+# install.sh links ~/.config/mise to this directory and ~/.dotfiles to the
+# repository, then runs `mise bootstrap`. No per-context file: what belongs
+# to one machine only goes in config.local.toml next to this file (ignored by Git).
+
+[vars]
+git_email = "deltamir@hotmail.fr"
+
+# --- System packages (apt: Debian, Ubuntu, Kali) ------------------------------
+# Installed with passwordless sudo, or with a password when install.sh runs in
+# a terminal; skipped otherwise, with the command to run printed.
+[bootstrap.packages]
+"apt:git" = "latest"
+"apt:curl" = "latest"
+"apt:ca-certificates" = "latest"
+"apt:unzip" = "latest"
+"apt:build-essential" = "latest"
+"apt:libatomic1" = "latest"          # node needs it
+"apt:zsh" = "latest"
+"apt:zsh-autosuggestions" = "latest"
+"apt:zsh-syntax-highlighting" = "latest"
+"apt:command-not-found" = "latest"
+"apt:nano" = "latest"
+"apt:jq" = "latest"
+"apt:tmux" = "latest"
+"apt:screen" = "latest"
+"apt:gpg" = "latest"
+"apt:pipx" = "latest"
+"apt:ent" = "latest"
+
+# --- Repositories --------------------------------------------------------------
+# Oh My Zsh at a fixed commit instead of `curl | sh`: bump it in a PR.
+[bootstrap.repos]
+"~/.oh-my-zsh" = { url = "https://github.com/ohmyzsh/ohmyzsh.git", ref = "87aa1a9b892a3b150f93c53b577a2ec67e617f30" }
+
+# --- Files -----------------------------------------------------------------------
+# Sources live in the repository, reached through the ~/.dotfiles link.
+# symlink (default): editing ~/.zshrc edits the repository file.
+# copy: files an application rewrites; `mise dot add --changed` brings edits back.
+# template: values that differ per machine.
+[dotfiles]
+"~/.zshrc" = "~/.dotfiles/home/zshrc"
+"~/.bashrc" = "~/.dotfiles/home/bashrc"
+"~/.bash_logout" = "~/.dotfiles/home/bash_logout"
+"~/.profile" = "~/.dotfiles/home/profile"
+"~/.zsh-custom" = { source = "~/.dotfiles/home/zsh", mode = "symlink-each" }
+"~/.gitconfig" = { source = "~/.dotfiles/home/gitconfig.tmpl", mode = "template" }
+"~/.config/gh/config.yml" = { source = "~/.dotfiles/home/config/gh/config.yml", mode = "copy" }
+"~/.aws/config" = { source = "~/.dotfiles/home/aws/config", mode = "copy", permissions = "0600" }
+
+# --- Tools -----------------------------------------------------------------------
+# What Homebrew used to install, now from mise. "latest" tracks upstream;
+# pin a version here when it matters (terraform = "1.9").
+[tools]
+gh = "latest"
+glab = "latest"
+vault = "latest"
+terraform = "latest"
+kubectl = "latest"
+yq = "latest"
+aws-cli = "latest"
+docker-cli = "latest"
+uv = "latest"
+node = "lts"
+yarn = "latest"
+
+# --- Checks ----------------------------------------------------------------------
+# Runs at the end of every `mise bootstrap`: each tool must answer, as the
+# `check` of Sarasvati tools. A failure fails install.sh.
+[tasks.bootstrap]
+description = "Check that every common tool answers"
+run = [
+  "gh --version",
+  "glab --version",
+  "vault --version",
+  "terraform -version",
+  "kubectl version --client",
+  "yq --version",
+  "aws --version",
+  "docker --version",
+  "uv --version",
+  "node --version",
+  "yarn --version",
+]

@@ -23,15 +23,25 @@ setopt hist_expire_dups_first
 setopt hist_ignore_dups
 setopt hist_ignore_space
 setopt hist_verify
+# Kali keeps one history per terminal; OMZ turns sharing on, which mixes the
+# commands of parallel terminals (one per target during an engagement).
+unsetopt share_history
+alias history="history 0"   # whole history, as on Kali
+
+# `time` output and coloured man pages, as on Kali
+TIMEFMT=$'\nreal\t%E\nuser\t%U\nsys\t%S\ncpu\t%P'
+export MANROFFOPT="-c"
 
 
 ### Colors / ls / grep / diff ###
 if command -v dircolors >/dev/null; then
   eval "$(dircolors -b)"
+  export LS_COLORS="$LS_COLORS:ow=30;44:"   # readable 777 directories, as on Kali
   alias ls='ls --color=auto'
   alias grep='grep --color=auto'
   alias diff='diff --color=auto'
   alias egrep='egrep --color=auto'
+  alias fgrep='fgrep --color=auto'
   alias ip='ip --color=auto'
   alias diff='diff --color=auto'
 

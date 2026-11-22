@@ -1,7 +1,17 @@
 PROMPT_ALTERNATIVE=twoline
 NEWLINE_BEFORE_PROMPT=yes
 
-prompt_symbol="㉿"
+# The symbol between user and host tells at a glance where you type.
+# Container first: a devcontainer built on the Kali image also says ID=kali.
+if [[ -n $REMOTE_CONTAINERS || -n $CODESPACES ]]; then
+  prompt_symbol="⬢"     # VS Code devcontainer
+elif [[ -n $WSL_DISTRO_NAME ]]; then
+  prompt_symbol="⊞"     # WSL
+elif grep -qx 'ID=kali' /etc/os-release 2>/dev/null; then
+  prompt_symbol="㉿"    # Kali (Sarasvati)
+else
+  prompt_symbol="@"
+fi
 
 
 ZSH_THEME_GIT_PROMPT_PREFIX="%{$fg_bold[blue]%}git:(%{$fg[red]%}"
@@ -35,3 +45,16 @@ precmd() {
 
 
 configure_prompt
+
+# Ctrl+P: switch between the two-line and the one-line prompt, as on Kali.
+toggle_oneline_prompt() {
+  if [ "$PROMPT_ALTERNATIVE" = oneline ]; then
+    PROMPT_ALTERNATIVE=twoline
+  else
+    PROMPT_ALTERNATIVE=oneline
+  fi
+  configure_prompt
+  zle reset-prompt
+}
+zle -N toggle_oneline_prompt
+bindkey '^P' toggle_oneline_prompt

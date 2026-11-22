@@ -1,0 +1,20 @@
+[user]
+	name = Deltamir
+	email = {{ vars.git_email }}
+
+# gh and glab come from mise: its shims directory has a stable path, unlike
+# the versioned install directories (the old glab/1.79.0 path broke on upgrade).
+[credential "https://github.com"]
+	helper =
+	helper = !{{ env.HOME }}/.local/share/mise/shims/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper =
+	helper = !{{ env.HOME }}/.local/share/mise/shims/gh auth git-credential
+[credential "https://gitlab.com"]
+	helper =
+	helper = !{{ env.HOME }}/.local/share/mise/shims/glab auth git-credential
+
+[color]
+    diff = auto
+    status = auto
+    branch = auto

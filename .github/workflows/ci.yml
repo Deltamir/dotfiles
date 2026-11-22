@@ -1,0 +1,37 @@
+name: ci
+
+# install.sh, twice, in the four kinds of machine it serves. A mise upgrade
+# or a tool that stops installing fails here, not on a machine.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 4 * * 1"   # weekly: "latest" tools move without a commit
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck install.sh tests/container.sh
+
+  install:
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: debian, image: "debian:stable", sudo: sudo, user: dev }
+          - { name: kali, image: "kalilinux/kali-rolling", sudo: sudo, user: dev }
+          - { name: devcontainer, image: "mcr.microsoft.com/devcontainers/base:debian", sudo: sudo, user: vscode }
+          - { name: no-sudo, image: "debian:stable", sudo: nosudo, user: dev }
+    name: install (${{ matrix.name }})
+    steps:
+      - uses: actions/checkout@v4
+      - run: tests/container.sh "${{ matrix.image }}" "${{ matrix.sudo }}" "${{ matrix.user }}"
