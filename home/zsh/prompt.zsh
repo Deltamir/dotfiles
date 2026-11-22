@@ -35,3 +35,16 @@ precmd() {
 
 
 configure_prompt
+
+# Ctrl+P: switch between the two-line and the one-line prompt, as on Kali.
+toggle_oneline_prompt() {
+  if [ "$PROMPT_ALTERNATIVE" = oneline ]; then
+    PROMPT_ALTERNATIVE=twoline
+  else
+    PROMPT_ALTERNATIVE=oneline
+  fi
+  configure_prompt
+  zle reset-prompt
+}
+zle -N toggle_oneline_prompt
+bindkey '^P' toggle_oneline_prompt

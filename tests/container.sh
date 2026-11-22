@@ -53,6 +53,11 @@ if [ "$MODE" = sudo ]; then
   # Kali-like shell on every distribution: the two-line prompt and the plugins.
   as 'zsh -ic "print -r -- \$PROMPT"' 2>/dev/null | grep -q "㉿" || fail "Kali-style prompt"
   as 'zsh -ic "(( \$+functions[_zsh_autosuggest_start] )) && (( \$+functions[_zsh_highlight] )) && echo plugins-ok"' 2>/dev/null | grep -q plugins-ok || fail "zsh plugins"
+  # Kali behaviours that Oh My Zsh would otherwise change: Ctrl+P prompt
+  # toggle, Kali's highlighting colours, one history per terminal.
+  as 'zsh -ic "bindkey ^P"' 2>/dev/null | grep -q toggle_oneline_prompt || fail "Ctrl+P prompt toggle"
+  as 'zsh -ic "print -r -- \${ZSH_HIGHLIGHT_STYLES[unknown-token]}"' 2>/dev/null | grep -qx underline || fail "Kali highlighting colours"
+  as 'zsh -ic "[[ -o sharehistory ]] || echo separate"' 2>/dev/null | grep -q separate || fail "history not shared between terminals"
 else
   grep -q "system packages skipped" /tmp/run2.log || fail "no-sudo message"
   as 'bash -ic "command -v gh"' >/dev/null 2>&1 || fail "tools without sudo"

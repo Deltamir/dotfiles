@@ -11,7 +11,8 @@ export PATH="$HOME/.local/bin:$PATH"
 ZSH_THEME="robbyrussell"
 
 # OMZ plugins
-plugins=(git git-prompt docker kubectl aws gcloud debian pip python colored-man-pages command-not-found virtualenv)
+# command-not-found comes from zsh/plugins.zsh, as on Kali; gcloud is not installed.
+plugins=(git git-prompt docker kubectl aws debian pip python colored-man-pages virtualenv)
 
 source $ZSH/oh-my-zsh.sh
 

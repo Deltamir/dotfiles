@@ -2,9 +2,11 @@
 ###  Zsh Completion — Optimized & Enhanced
 ### ------------------------------------------------------------
 
-# Load and activate completion system
-autoload -Uz compinit
-compinit -u
+# Oh My Zsh already ran compinit; run it only if OMZ did not load.
+if (( ! $+functions[compdef] )); then
+  autoload -Uz compinit
+  compinit -u
+fi
 
 # Enable completion menu with nice UI
 zstyle ':completion:*' menu select
