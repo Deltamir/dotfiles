@@ -1,0 +1,19 @@
+[profile default]
+sso_session = sandbox
+sso_account_id = 058264436400
+sso_role_name = AdministratorAccess
+region = eu-west-3
+[profile AdminMgmt]
+sso_session = management
+sso_account_id = 767745953447
+sso_role_name = AdministratorAccess
+region = eu-west-3
+
+[sso-session management]
+sso_start_url = https://d-80671d8913.awsapps.com/start
+sso_region = eu-west-3
+sso_registration_scopes = sso:account:access
+[sso-session sandbox]
+sso_start_url = https://d-80671d8913.awsapps.com/start
+sso_region = eu-west-3
+sso_registration_scopes = sso:account:access
