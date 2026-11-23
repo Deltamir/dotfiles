@@ -209,7 +209,11 @@ fi
 if [ "$(id -u)" -eq 0 ] || sudo -n true 2>/dev/null; then
   log "passwordless sudo: system packages included"
 elif [ -t 0 ]; then
-  log "sudo needs a password: system packages included, sudo will ask for it"
+  log "sudo needs a password: system packages included, asking for it now"
+  # Ask here: this script's output goes through tee (the log), so mise sees
+  # no terminal and its sudo cannot prompt. sudo -v reads the password from
+  # the terminal and caches it; mise's sudo then runs without asking.
+  sudo -v
 else
   args+=(--skip packages --skip files)
   log "no passwordless sudo: system packages skipped."
