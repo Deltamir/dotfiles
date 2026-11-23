@@ -55,6 +55,10 @@ identity() {
 identity perso
 identity work
 run() { su - "$U" -c "cd ~ && ./dotfiles/install.sh $*"; }
+# A ~/.gitconfig already in place, as VS Code copies the host's into a
+# devcontainer: its Git user must survive the template.
+su - "$U" -c 'git config --global user.name host && git config --global user.email host@example.invalid'
+
 echo "##### run 1"; run --identity /srv/perso.git
 echo "##### run 2"; run 2>&1 | tee /tmp/run2.log
 echo "##### checks"
@@ -70,6 +74,7 @@ as 'grep -q "$HOME/.local/share/mise/shims/gh auth" ~/.gitconfig' || fail "gitco
 as 'test "$(stat -c %a ~/.aws/config)" = 600' || fail "aws config permissions"
 as 'grep -q "profile perso" ~/.aws/config && test -L ~/.perso-only' || fail "identity files"
 as 'test "$(git config user.email)" = perso@example.invalid' || fail "Git identity from the identity layer"
+as 'test "$(git config -f ~/.gitconfig.local user.email)" = host@example.invalid' || fail "Git user of the existing ~/.gitconfig not kept"
 as 'test -L ~/.dotfiles-identity && test -L ~/.dotfiles/config/mise/conf.d/identity.toml' || fail "identity links"
 as 'test -z "$(git -C ~/dotfiles status --porcelain)"' || fail "identity link shows in the dotfiles checkout"
 # The original ~/.bashrc from /etc/skel is kept, not overwritten.
@@ -183,7 +188,8 @@ if [ "$MODE" = sudo ]; then
   # No identity: the shell and tools stay, no one's files remain.
   as 'cd ~ && ./dotfiles/install.sh --identity none' >/tmp/swap3.log 2>&1 || { cat /tmp/swap3.log; fail "identity none"; }
   as 'test ! -e ~/.aws/config && test ! -e ~/.gitconfig.identity && test ! -e ~/.dotfiles-identity' || fail "identity files left"
-  as 'test -z "$(git config user.email || true)"' || fail "Git identity left"
+  # Without identity, the Git user found in place (devcontainer: the host's).
+  as 'test "$(git config user.email)" = host@example.invalid' || fail "kept Git user not used without identity"
   as 'test -L ~/.zshrc && grep -q "shims/gh auth" ~/.gitconfig' || fail "base dotfiles lost with the identity"
 fi
 

@@ -216,6 +216,25 @@ else
   log "  install them with: mise bootstrap packages apply   (asks for your password)"
 fi
 
+# A ~/.gitconfig this repository did not write (VS Code copies the host's into
+# a devcontainer; a machine set up before these dotfiles) is about to be
+# replaced by the template. Keep who commits: its [user] goes to
+# ~/.gitconfig.local, included by the template before the identity layer, so
+# an identity still wins. Done once; ~/.gitconfig.local is then left alone.
+keep_git_user() {
+  local f="$HOME/.gitconfig" local_f="$HOME/.gitconfig.local" key value
+  [ -f "$f" ] && [ ! -L "$f" ] && [ ! -e "$local_f" ] || return 0
+  ! grep -q 'gitconfig.identity' "$f" || return 0
+  for key in user.name user.email; do
+    value="$(git config -f "$f" --get "$key" || true)"
+    if [ -n "$value" ]; then
+      git config -f "$local_f" "$key" "$value"
+    fi
+  done
+  if [ -e "$local_f" ]; then log "kept the Git user of the existing ~/.gitconfig in $local_f"; fi
+}
+keep_git_user
+
 # Real files where mise puts links (a fresh ~/.bashrc from /etc/skel, a chezmoi
 # copy) stop the run; --force-dotfiles replaces them, so keep a copy first.
 # The pretty-printed JSON is read with awk: jq may not be installed yet.

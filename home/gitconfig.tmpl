@@ -18,5 +18,10 @@
 # Who you are (name, email) and per-employer settings (a company GitLab's
 # credential helper...): from the identity repository. Last, so it wins; git
 # skips a missing include, so a machine without identity still works.
+# Before it, ~/.gitconfig.local: the Git user of a ~/.gitconfig found in place
+# (VS Code copies the host's into devcontainers, which have no identity), kept
+# by install.sh. Not versioned.
+[include]
+	path = ~/.gitconfig.local
 [include]
 	path = ~/.gitconfig.identity
