@@ -55,8 +55,8 @@ identity() {
 identity perso
 identity work
 run() { su - "$U" -c "cd ~ && ./dotfiles/install.sh $*"; }
-# A ~/.gitconfig already in place, as VS Code copies the host's into a
-# devcontainer: its Git user must survive the template.
+# A ~/.gitconfig already in place (from /etc/skel or by hand): with an
+# identity given on the first run, the identity decides who commits.
 su - "$U" -c 'git config --global user.name host && git config --global user.email host@example.invalid'
 
 echo "##### run 1"; run --identity /srv/perso.git
@@ -74,7 +74,11 @@ as 'grep -q "$HOME/.local/share/mise/shims/gh auth" ~/.gitconfig' || fail "gitco
 as 'test "$(stat -c %a ~/.aws/config)" = 600' || fail "aws config permissions"
 as 'grep -q "profile perso" ~/.aws/config && test -L ~/.perso-only' || fail "identity files"
 as 'test "$(git config user.email)" = perso@example.invalid' || fail "Git identity from the identity layer"
-as 'test "$(git config -f ~/.gitconfig.local user.email)" = host@example.invalid' || fail "Git user of the existing ~/.gitconfig not kept"
+as 'test ! -e ~/.gitconfig.local' || fail "Git user kept although an identity was given"
+# Written in full in ~/.gitconfig (not only included): VS Code copies this file
+# into devcontainers, which have no identity.
+as 'git config -f ~/.gitconfig user.email' | grep -qx perso@example.invalid || fail "identity user not written in ~/.gitconfig"
+as 'cp ~/.gitconfig /tmp/host-gitconfig' 
 as 'test -L ~/.dotfiles-identity && test -L ~/.dotfiles/config/mise/conf.d/identity.toml' || fail "identity links"
 as 'test -z "$(git -C ~/dotfiles status --porcelain)"' || fail "identity link shows in the dotfiles checkout"
 # The original ~/.bashrc from /etc/skel is kept, not overwritten.
@@ -188,8 +192,16 @@ if [ "$MODE" = sudo ]; then
   # No identity: the shell and tools stay, no one's files remain.
   as 'cd ~ && ./dotfiles/install.sh --identity none' >/tmp/swap3.log 2>&1 || { cat /tmp/swap3.log; fail "identity none"; }
   as 'test ! -e ~/.aws/config && test ! -e ~/.gitconfig.identity && test ! -e ~/.dotfiles-identity' || fail "identity files left"
-  # Without identity, the Git user found in place (devcontainer: the host's).
-  as 'test "$(git config user.email)" = host@example.invalid' || fail "kept Git user not used without identity"
+  as 'test -z "$(git config user.email || true)"' || fail "Git identity left"
+
+  # A devcontainer: first run without identity, VS Code's copy of the host's
+  # ~/.gitconfig in place. Its user must survive the template.
+  as 'rm -f ~/.local/state/dotfiles/git-user-checked && cp /tmp/host-gitconfig ~/.gitconfig'
+  as 'cd ~ && ./dotfiles/install.sh' >/tmp/dc.log 2>&1 || { cat /tmp/dc.log; fail "devcontainer-like run"; }
+  as 'test "$(git config user.email)" = perso@example.invalid' || fail "host Git user lost in a devcontainer"
+  # The next runs leave it alone.
+  as 'cd ~ && ./dotfiles/install.sh' >/dev/null 2>&1 || fail "second devcontainer-like run"
+  as 'test "$(git config user.email)" = perso@example.invalid' || fail "host Git user lost on the next run"
   as 'test -L ~/.zshrc && grep -q "shims/gh auth" ~/.gitconfig' || fail "base dotfiles lost with the identity"
 fi
 

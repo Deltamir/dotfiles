@@ -216,15 +216,18 @@ else
   log "  install them with: mise bootstrap packages apply   (asks for your password)"
 fi
 
-# A ~/.gitconfig this repository did not write (VS Code copies the host's into
-# a devcontainer; a machine set up before these dotfiles) is about to be
-# replaced by the template. Keep who commits: its [user] goes to
-# ~/.gitconfig.local, included by the template before the identity layer, so
-# an identity still wins. Done once; ~/.gitconfig.local is then left alone.
+# First run on a machine without identity (a devcontainer): a ~/.gitconfig
+# already there came from elsewhere (VS Code copies the host's, whose [user]
+# the template writes in full) and is about to be replaced by the template.
+# Keep who commits: its [user] goes to ~/.gitconfig.local, included by the
+# template before the identity layer, so an identity set later still wins.
+# Only on the first run (stamp), so the file this repository rendered itself is
+# never taken for a foreign one, e.g. after --identity none.
 keep_git_user() {
-  local f="$HOME/.gitconfig" local_f="$HOME/.gitconfig.local" key value
-  [ -f "$f" ] && [ ! -L "$f" ] && [ ! -e "$local_f" ] || return 0
-  ! grep -q 'gitconfig.identity' "$f" || return 0
+  local f="$HOME/.gitconfig" local_f="$HOME/.gitconfig.local" stamp="$STATE/git-user-checked" key value
+  [ ! -e "$stamp" ] || return 0
+  : > "$stamp"
+  [ ! -d "$IDENTITY_DIR" ] && [ -f "$f" ] && [ ! -L "$f" ] && [ ! -e "$local_f" ] || return 0
   for key in user.name user.email; do
     value="$(git config -f "$f" --get "$key" || true)"
     if [ -n "$value" ]; then
