@@ -202,7 +202,10 @@ if [ "$MODE" = sudo ]; then
   as 'test ! -e ~/.gitconfig' || fail "install.sh wrote ~/.gitconfig without identity"
   as 'cp /tmp/host-gitconfig ~/.gitconfig'
   as 'test "$(git config user.email)" = perso@example.invalid' || fail "host Git user not used in a devcontainer"
-  as 'git config --get credential.https://github.com.helper | grep -q "$HOME/.local/share/mise/shims/gh"' || fail "common Git settings with the copied ~/.gitconfig"
+  # No identity: no gh/glab helper, VS Code's helper (in its copy) handles
+  # GitHub, with the host's credentials; the common settings are still there.
+  as '! git config --get-all credential.https://github.com.helper' || fail "gh helper shadows VS Code's in a devcontainer"
+  as 'git config --get color.diff' >/dev/null || fail "common Git settings with the copied ~/.gitconfig"
   as 'cd ~ && ./dotfiles/install.sh' >/dev/null 2>&1 || fail "second devcontainer-like run"
   as 'cmp -s ~/.gitconfig /tmp/host-gitconfig' || fail "install.sh touched the copied ~/.gitconfig"
 
@@ -211,7 +214,8 @@ if [ "$MODE" = sudo ]; then
   as 'printf "[user]\n\tname = old\n\temail = old@example.invalid\n[credential \"https://github.com\"]\n\thelper = !/x/gh auth git-credential\n" > ~/.gitconfig'
   as 'cd ~ && ./dotfiles/install.sh' >/dev/null 2>&1 || fail "run over an old ~/.gitconfig"
   as '! grep -q "auth git-credential" ~/.gitconfig && test "$(git config user.email)" = old@example.invalid' || fail "old ~/.gitconfig not migrated"
-  as 'test -L ~/.zshrc && grep -q "shims/gh auth" ~/.config/git/config' || fail "base dotfiles lost with the identity"
+  as 'test -L ~/.zshrc && git config -f ~/.config/git/config --get color.diff' >/dev/null || fail "base dotfiles lost with the identity"
+  as '! grep -q "shims/gh auth" ~/.config/git/config' || fail "gh helper left without identity"
 fi
 
 echo "ALL CHECKS PASSED ($MODE, $U)"

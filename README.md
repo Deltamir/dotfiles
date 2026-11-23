@@ -54,7 +54,9 @@ jamais de mot de passe : sans accès, elle garde la version locale.
 `config.toml` ne doit définir aucune `[vars]` qu'une identité fixe : le fichier
 de base l'emporte sur `conf.d/`.
 
-Git : la config commune (helpers gh/glab, include de l'identité) est
+Git : la config commune (include de l'identité, et les helpers gh/glab sur
+les machines qui ont une identité seulement : dans un devcontainer, c'est le
+helper de VS Code qui transmet les identifiants de l'hôte) est
 `~/.config/git/config`. `~/.gitconfig` ne contient que `[user]`, écrit par
 `install.sh` depuis l'identité. Les devcontainers n'ont pas d'identité :
 `install.sh` n'y touche jamais `~/.gitconfig`, qui est la copie que VS Code
