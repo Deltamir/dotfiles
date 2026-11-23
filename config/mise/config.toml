@@ -182,36 +182,6 @@ publish() {
 publish "$HOME/.dotfiles"
 if [ -d "$HOME/.dotfiles-identity/.git" ]; then publish "$HOME/.dotfiles-identity"; fi
 '''
-set -eu
-mise dot add --changed --yes
-git add -A
-if git diff --cached --quiet; then
-  echo "Nothing to publish."
-  exit 0
-fi
-git --no-pager diff --cached
-echo
-git --no-pager diff --cached --stat
-if ! gitleaks git --staged --pre-commit --redact --no-banner .; then
-  echo "gitleaks found a possible secret: nothing was committed. Fix it, then run again." >&2
-  git reset -q
-  exit 1
-fi
-printf 'Commit and push these changes? [y/N] '
-read -r answer
-case "$answer" in
-  y | Y | yes | o | oui) ;;
-  *) echo "Cancelled; the changes stay staged."; exit 1 ;;
-esac
-git commit -q -m "dotfiles: changes from $(hostname)"
-if ! git pull --rebase -q; then
-  echo "Another machine changed the same lines. Resolve in ~/.dotfiles (git status)," >&2
-  echo "then: git rebase --continue && git push" >&2
-  exit 1
-fi
-git push -q
-echo "Published."
-'''
 
 # --- Background jobs (systemd user units; skipped where there is no user manager,
 # such as containers, or WSL without systemd=true in /etc/wsl.conf) ---------------
