@@ -15,6 +15,8 @@ export DEBIAN_FRONTEND=noninteractive
 if [ -f /extra-ca.crt ]; then
   apt-get update -qq && apt-get install -y -qq --no-install-recommends ca-certificates >/dev/null
   cp /extra-ca.crt /usr/local/share/ca-certificates/extra.crt && update-ca-certificates >/dev/null
+  # uv (azure-cli) ignores the system store unless told; local runs only.
+  printf 'UV_NATIVE_TLS=1\nSSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt\n' >> /etc/environment
 fi
 # What any machine that cloned this repository has: git, curl, sudo, a user.
 if ! command -v sudo >/dev/null || ! command -v curl >/dev/null || ! command -v git >/dev/null; then
@@ -72,6 +74,21 @@ if [ "$MODE" = sudo ]; then
 else
   grep -q "system packages skipped" /tmp/run2.log || fail "no-sudo message"
   as 'bash -ic "command -v gh"' >/dev/null 2>&1 || fail "tools without sudo"
+fi
+
+if [ "$MODE" = sudo ]; then
+  echo "##### system packages and files"
+  as 'gcloud --version' >/dev/null 2>&1 || fail "gcloud (Google apt source)"
+  as 'dig -v' >/dev/null 2>&1 || fail "dig (bind9-dnsutils)"
+  grep -q 'Unattended-Upgrade "1"' /etc/apt/apt.conf.d/20auto-upgrades || fail "unattended-upgrades enabled"
+  # Which origins unattended-upgrades would really use on this distribution.
+  origins=$(unattended-upgrade --dry-run -d 2>&1 | grep -m1 'Allowed origins are' || true)
+  echo "$origins"
+  if grep -qx 'ID=kali' /etc/os-release; then
+    echo "$origins" | grep -q 'origin=Kali,codename=kali-rolling' || fail "Kali origin for unattended-upgrades"
+  else
+    echo "$origins" | grep -qi 'security' || fail "security origin for unattended-upgrades"
+  fi
 fi
 
 if [ "$MODE" = sudo ]; then

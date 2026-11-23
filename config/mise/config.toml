@@ -25,8 +25,52 @@ git_email = "deltamir@hotmail.fr"
 "apt:tmux" = "latest"
 "apt:screen" = "latest"
 "apt:gpg" = "latest"
+"apt:gnupg" = "latest"
 "apt:pipx" = "latest"
 "apt:ent" = "latest"
+"apt:wget" = "latest"
+"apt:xz-utils" = "latest"
+"apt:lsb-release" = "latest"
+"apt:bind9-dnsutils" = "latest"      # dig, nslookup (dnsutils is gone)
+"apt:expect" = "latest"
+"apt:python3-pip" = "latest"
+"apt:python-is-python3" = "latest"
+"apt:unattended-upgrades" = "latest"
+"apt:google-cloud-cli" = "latest"    # from the Google source below
+
+# Google's repository: google-cloud-cli is in neither Debian nor Kali.
+# Fixed suite (cloud-sdk), so the same entry works on Debian, Ubuntu and Kali.
+[bootstrap.apt.sources.google-cloud]
+uris = "https://packages.cloud.google.com/apt"
+suites = "cloud-sdk"
+components = "main"
+key = "https://packages.cloud.google.com/apt/doc/apt-key.gpg"
+fingerprint = "35BA A0B3 3E9E B396 F59C A838 C0BA 5CE6 DC63 15A3"
+
+# --- Automatic upgrades (unattended-upgrades) -----------------------------------
+# Daily. Debian and Ubuntu: their security updates (the package's defaults).
+# Kali has no separate security archive: the Kali origin below makes it apply
+# every kali-rolling update, automatically (owner's choice). Without systemd
+# (devcontainers, WSL without systemd=true) apt's timers do not run.
+[bootstrap.files."/etc/apt/apt.conf.d/20auto-upgrades"]
+os = "linux"
+owner = "root"
+mode = "0644"
+content = """
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+"""
+
+[bootstrap.files."/etc/apt/apt.conf.d/52dotfiles-unattended-upgrades"]
+os = "linux"
+owner = "root"
+mode = "0644"
+content = """
+// dotfiles: also upgrade from Kali's repository on Kali (no-op elsewhere).
+Unattended-Upgrade::Origins-Pattern {
+        "origin=Kali,codename=kali-rolling";
+};
+"""
 
 # --- Repositories --------------------------------------------------------------
 # Oh My Zsh at a fixed commit instead of `curl | sh`: bump it in a PR.
@@ -64,6 +108,8 @@ uv = "latest"
 node = "lts"
 yarn = "latest"
 gitleaks = "latest"     # secret scan of `mise run push`
+azure-cli = "latest"    # from PyPI: Microsoft's apt repository has no Debian 13 suite
+claude = "latest"       # Claude Code, Anthropic's release binary
 
 # --- Checks ----------------------------------------------------------------------
 # Runs at the end of every `mise bootstrap`: each tool must answer, as the
@@ -83,6 +129,8 @@ run = [
   "node --version",
   "yarn --version",
   "gitleaks version",
+  "az --version",
+  "claude --version",
 ]
 
 # --- Publishing changes ------------------------------------------------------------

@@ -106,6 +106,31 @@ Supprimer la clé (sur GitHub et sur la VM) en fin de mission. Sans clé :
 `git -C ~/.dotfiles format-patch origin/main` puis appliquer le patch depuis
 ton poste.
 
+## Outils communs
+
+Paquets apt (avec sudo) : git, curl, wget, gnupg, lsb-release, bind9-dnsutils
+(dig), expect, xz-utils, unzip, jq, nano, screen, tmux, pipx, python3-pip,
+python-is-python3, zsh et ses plugins, et `google-cloud-cli` depuis le dépôt
+apt de Google (absent de Debian et de Kali ; suite fixe `cloud-sdk`).
+
+Outils mise (avec ou sans sudo) : gh, glab, terraform, vault, kubectl, yq,
+aws-cli, **azure-cli** (depuis PyPI : le dépôt apt de Microsoft n'a pas de suite
+Debian 13), docker-cli (le client seul ; le moteur Docker n'est installé que sur
+la VM Sarasvati), uv, node, yarn, gitleaks et **Claude Code** (`claude`, binaire
+publié par Anthropic, mis à jour par le `mise upgrade` hebdomadaire).
+
+## Mises à jour automatiques du système
+
+`unattended-upgrades` tourne chaque jour partout où apt a ses minuteurs systemd
+(pas dans les devcontainers, ni sur WSL sans `systemd=true`). Sur Debian et
+Ubuntu : les mises à jour de sécurité (réglages du paquet). Sur Kali, qui n'a
+pas de dépôt de sécurité séparé : **toutes** les mises à jour de kali-rolling
+(`/etc/apt/apt.conf.d/52dotfiles-unattended-upgrades`, origine `Kali`).
+Contrepartie assumée : un outil peut changer de version d'un jour à l'autre.
+
+Sans sudo, les fichiers système (`[bootstrap.files]`) sont sautés comme les
+paquets.
+
 ## Choix et limites
 
 - **Pas de Python dans `[tools]`** : un `python3` de mise passerait devant
