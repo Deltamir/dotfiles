@@ -178,6 +178,9 @@ drop_identity() {
   fi
   log "removing the identity $(identity_url)"
   mise dot unapply --group identity --force --yes
+  # Its user, written to ~/.gitconfig by this script.
+  git config -f "$HOME/.gitconfig" --remove-section user 2>/dev/null || true
+  if [ -f "$HOME/.gitconfig" ] && ! grep -q '[^[:space:]]' "$HOME/.gitconfig"; then rm -f "$HOME/.gitconfig"; fi
   rm -f "$IDENTITY_LINK" "$IDENTITY_CONF"
   rm -rf "$IDENTITY_DIR"
 }
@@ -200,6 +203,30 @@ if [ -d "$IDENTITY_DIR" ]; then
   link "$IDENTITY_CONF" "$IDENTITY_LINK/mise.toml"
 fi
 
+# Git: the common settings are ~/.config/git/config (mise template);
+# ~/.gitconfig holds [user] only. It used to be the rendered template: set that
+# copy aside (it holds this machine's paths), keeping its [user].
+gitconfig="$HOME/.gitconfig"
+if [ -f "$gitconfig" ] && [ ! -L "$gitconfig" ] && grep -q 'auth git-credential' "$gitconfig"; then
+  old_name="$(git config -f "$gitconfig" --get user.name || true)"
+  old_email="$(git config -f "$gitconfig" --get user.email || true)"
+  backup "$gitconfig"
+  if [ -n "$old_name" ]; then git config -f "$gitconfig" user.name "$old_name"; fi
+  if [ -n "$old_email" ]; then git config -f "$gitconfig" user.email "$old_email"; fi
+fi
+# With an identity, its user goes to ~/.gitconfig: VS Code copies that file into
+# devcontainers. Without one (a devcontainer), ~/.gitconfig is never touched:
+# it is VS Code's copy of the host's, made before or after this script.
+if [ -d "$IDENTITY_DIR" ]; then
+  for key in user.name user.email; do
+    value="$(git config -f "$IDENTITY_LINK/home/dot-gitconfig.identity" --get "$key" || true)"
+    if [ -n "$value" ] && [ "$(git config -f "$gitconfig" --get "$key" || true)" != "$value" ]; then
+      git config -f "$gitconfig" "$key" "$value"
+      log "Git $key from the identity in ~/.gitconfig"
+    fi
+  done
+fi
+
 # --- 4. bootstrap ---------------------------------------------------------------
 args=(--yes --force-dotfiles)
 if [ "$MODE" = --sync-pulled ]; then
@@ -220,27 +247,6 @@ else
   log "  install them with: mise bootstrap packages apply   (asks for your password)"
 fi
 
-# First run on a machine without identity (a devcontainer): a ~/.gitconfig
-# already there came from elsewhere (VS Code copies the host's, whose [user]
-# the template writes in full) and is about to be replaced by the template.
-# Keep who commits: its [user] goes to ~/.gitconfig.local, included by the
-# template before the identity layer, so an identity set later still wins.
-# Only on the first run (stamp), so the file this repository rendered itself is
-# never taken for a foreign one, e.g. after --identity none.
-keep_git_user() {
-  local f="$HOME/.gitconfig" local_f="$HOME/.gitconfig.local" stamp="$STATE/git-user-checked" key value
-  [ ! -e "$stamp" ] || return 0
-  : > "$stamp"
-  [ ! -d "$IDENTITY_DIR" ] && [ -f "$f" ] && [ ! -L "$f" ] && [ ! -e "$local_f" ] || return 0
-  for key in user.name user.email; do
-    value="$(git config -f "$f" --get "$key" || true)"
-    if [ -n "$value" ]; then
-      git config -f "$local_f" "$key" "$value"
-    fi
-  done
-  if [ -e "$local_f" ]; then log "kept the Git user of the existing ~/.gitconfig in $local_f"; fi
-}
-keep_git_user
 
 # Real files where mise puts links (a fresh ~/.bashrc from /etc/skel, a chezmoi
 # copy) stop the run; --force-dotfiles replaces them, so keep a copy first.

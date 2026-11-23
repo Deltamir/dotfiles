@@ -1,16 +1,7 @@
-{#- Who commits, written in full here and not only included: VS Code copies
-    this file into devcontainers, which have no identity layer and so no
-    ~/.gitconfig.identity to include. Read from the identity repository,
-    present before this file is rendered. -#}
-{% set id_file = env.HOME ~ "/.dotfiles-identity/home/dot-gitconfig.identity" -%}
-{% set git_name = exec(command="git config -f '" ~ id_file ~ "' --get user.name || true") | trim -%}
-{% set git_email = exec(command="git config -f '" ~ id_file ~ "' --get user.email || true") | trim -%}
-{% if git_email != "" -%}
-[user]
-	name = {{ git_name }}
-	email = {{ git_email }}
-
-{% endif -%}
+# Common Git settings, deployed as ~/.config/git/config (not ~/.gitconfig).
+# ~/.gitconfig, read after this file, holds only [user]: install.sh writes the
+# identity's there, and VS Code copies it into devcontainers, which have no
+# identity. Nothing machine-specific goes there, so that copy works anywhere.
 # gh and glab come from mise: its shims directory has a stable path, unlike
 # the versioned install directories (the old glab/1.79.0 path broke on upgrade).
 [credential "https://github.com"]
@@ -28,13 +19,8 @@
     status = auto
     branch = auto
 
-# Who you are (name, email) and per-employer settings (a company GitLab's
-# credential helper...): from the identity repository. Last, so it wins; git
-# skips a missing include, so a machine without identity still works.
-# Before it, ~/.gitconfig.local: the Git user of a ~/.gitconfig found in place
-# on a machine's first run without identity (a devcontainer: VS Code's copy of
-# the host's file, [user] above included), kept by install.sh. Not versioned.
-[include]
-	path = ~/.gitconfig.local
+# Per-employer settings (a company GitLab's credential helper...) and who you
+# are: from the identity repository. Last, so it wins; git skips a missing
+# include, so a machine without identity still works.
 [include]
 	path = ~/.gitconfig.identity

@@ -69,16 +69,16 @@ if grep -E 'installing mise|linked |moved existing|created symlink|symlink\(s\)|
 fi
 as() { su - "$U" -c "$1"; }
 as 'test -L ~/.zshrc && test -L ~/.zsh-custom/prompt.zsh && test -f ~/.oh-my-zsh/oh-my-zsh.sh' || fail "files"
-as 'grep -q "$HOME/.local/share/mise/shims/gh auth" ~/.gitconfig' || fail "gitconfig template"
+as 'grep -q "$HOME/.local/share/mise/shims/gh auth" ~/.config/git/config' || fail "gitconfig template"
 # The identity layer: its files, merged config, Git identity through the include.
 as 'test "$(stat -c %a ~/.aws/config)" = 600' || fail "aws config permissions"
 as 'grep -q "profile perso" ~/.aws/config && test -L ~/.perso-only' || fail "identity files"
 as 'test "$(git config user.email)" = perso@example.invalid' || fail "Git identity from the identity layer"
-as 'test ! -e ~/.gitconfig.local' || fail "Git user kept although an identity was given"
-# Written in full in ~/.gitconfig (not only included): VS Code copies this file
-# into devcontainers, which have no identity.
-as 'git config -f ~/.gitconfig user.email' | grep -qx perso@example.invalid || fail "identity user not written in ~/.gitconfig"
-as 'cp ~/.gitconfig /tmp/host-gitconfig' 
+# ~/.gitconfig holds the identity's user and nothing machine-specific: VS Code
+# copies it into devcontainers, which have no identity.
+as 'git config -f ~/.gitconfig user.email' | grep -qx perso@example.invalid || fail "identity user not in ~/.gitconfig"
+as '! grep -q "auth git-credential" ~/.gitconfig' || fail "machine-specific settings in ~/.gitconfig"
+as 'cp ~/.gitconfig /tmp/host-gitconfig'
 as 'test -L ~/.dotfiles-identity && test -L ~/.dotfiles/config/mise/conf.d/identity.toml' || fail "identity links"
 as 'test -z "$(git -C ~/dotfiles status --porcelain)"' || fail "identity link shows in the dotfiles checkout"
 # The original ~/.bashrc from /etc/skel is kept, not overwritten.
@@ -192,17 +192,26 @@ if [ "$MODE" = sudo ]; then
   # No identity: the shell and tools stay, no one's files remain.
   as 'cd ~ && ./dotfiles/install.sh --identity none' >/tmp/swap3.log 2>&1 || { cat /tmp/swap3.log; fail "identity none"; }
   as 'test ! -e ~/.aws/config && test ! -e ~/.gitconfig.identity && test ! -e ~/.dotfiles-identity' || fail "identity files left"
+  as '! git config -f ~/.gitconfig --get user.email' || fail "identity user left in ~/.gitconfig"
   as 'test -z "$(git config user.email || true)"' || fail "Git identity left"
 
-  # A devcontainer: first run without identity, VS Code's copy of the host's
-  # ~/.gitconfig in place. Its user must survive the template.
-  as 'rm -f ~/.local/state/dotfiles/git-user-checked && cp /tmp/host-gitconfig ~/.gitconfig'
-  as 'cd ~ && ./dotfiles/install.sh' >/tmp/dc.log 2>&1 || { cat /tmp/dc.log; fail "devcontainer-like run"; }
-  as 'test "$(git config user.email)" = perso@example.invalid' || fail "host Git user lost in a devcontainer"
-  # The next runs leave it alone.
+  # A devcontainer: no identity, VS Code copies the host's ~/.gitconfig after
+  # (or before) install.sh. The author is the host's, the common settings
+  # still come from ~/.config/git/config, and install.sh leaves the copy alone.
+  as 'rm -f ~/.gitconfig && cd ~ && ./dotfiles/install.sh' >/tmp/dc.log 2>&1 || { cat /tmp/dc.log; fail "devcontainer-like run"; }
+  as 'test ! -e ~/.gitconfig' || fail "install.sh wrote ~/.gitconfig without identity"
+  as 'cp /tmp/host-gitconfig ~/.gitconfig'
+  as 'test "$(git config user.email)" = perso@example.invalid' || fail "host Git user not used in a devcontainer"
+  as 'git config --get credential.https://github.com.helper | grep -q "$HOME/.local/share/mise/shims/gh"' || fail "common Git settings with the copied ~/.gitconfig"
   as 'cd ~ && ./dotfiles/install.sh' >/dev/null 2>&1 || fail "second devcontainer-like run"
-  as 'test "$(git config user.email)" = perso@example.invalid' || fail "host Git user lost on the next run"
-  as 'test -L ~/.zshrc && grep -q "shims/gh auth" ~/.gitconfig' || fail "base dotfiles lost with the identity"
+  as 'cmp -s ~/.gitconfig /tmp/host-gitconfig' || fail "install.sh touched the copied ~/.gitconfig"
+
+  # A machine set up before ~/.config/git/config: its rendered ~/.gitconfig
+  # (paths of this machine, [user]) is set aside, the user kept.
+  as 'printf "[user]\n\tname = old\n\temail = old@example.invalid\n[credential \"https://github.com\"]\n\thelper = !/x/gh auth git-credential\n" > ~/.gitconfig'
+  as 'cd ~ && ./dotfiles/install.sh' >/dev/null 2>&1 || fail "run over an old ~/.gitconfig"
+  as '! grep -q "auth git-credential" ~/.gitconfig && test "$(git config user.email)" = old@example.invalid' || fail "old ~/.gitconfig not migrated"
+  as 'test -L ~/.zshrc && grep -q "shims/gh auth" ~/.config/git/config' || fail "base dotfiles lost with the identity"
 fi
 
 echo "ALL CHECKS PASSED ($MODE, $U)"
