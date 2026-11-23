@@ -1,0 +1,8 @@
+# Included last by ~/.gitconfig: who commits, and per-employer Git settings.
+[user]
+	name = Your Name
+	email = you@example.invalid
+# A company GitLab, logged in with `glab auth login --hostname gitlab.example.com`:
+# [credential "https://gitlab.example.com"]
+# 	helper =
+# 	helper = !glab auth git-credential

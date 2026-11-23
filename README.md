@@ -8,7 +8,8 @@ les fichiers de config. Un seul point d'entrée : `install.sh`.
 ```
 install.sh              point d'entrée unique, idempotent
 config/mise/config.toml LA config : paquets, Oh My Zsh, fichiers, outils, vérifications
-home/                   sources des fichiers déployés (zshrc, zsh/, gitconfig.tmpl, gh, aws)
+home/                   sources des fichiers déployés (zshrc, zsh/, gitconfig.tmpl, gh)
+examples/identity/      modèle d'un repo d'identité (voir « Identité »)
 tests/container.sh      install.sh deux fois dans un conteneur (utilisé par la CI)
 ```
 
@@ -18,11 +19,46 @@ tests/container.sh      install.sh deux fois dans un conteneur (utilisé par la 
 devient la config **globale** de mise : les outils sont actifs dans tous les
 dossiers, pas seulement dans le repo. Log : `~/.local/state/dotfiles/install.log`.
 
+## Identité
+
+Ce repo est public et ne dit pas qui tu es. Nom et mail Git, profils AWS,
+réglages propres à un employeur viennent d'un **repo d'identité**, privé, choisi
+par machine :
+
+| Identité | Repo | Machines |
+|---|---|---|
+| perso | `github.com/Deltamir/dotfiles-perso` | WSL perso, Sarasvati perso |
+| pro | un repo sur le GitLab de l'entreprise | WSL pro, Sarasvati en mission |
+
+```bash
+~/dotfiles/install.sh --identity <url>    # pose cette identité (remplace l'actuelle)
+~/dotfiles/install.sh --identity none     # plus d'identité
+```
+
+`install.sh` clone le repo dans `~/.local/share/dotfiles-identity`, le relie en
+`~/.dotfiles-identity` et relie son `mise.toml` dans `config/mise/conf.d/`, où
+mise le fusionne avec `config.toml`. Ses fichiers forment le groupe de dotfiles
+`identity` : changer d'identité retire d'abord tous les fichiers de la
+précédente (`mise dot unapply --group identity`), puis supprime son clone. Rien
+de l'identité perso ne reste sur une machine passée en pro. Le changement est
+refusé tant que l'identité actuelle a des modifications non publiées (une copie
+réécrite par `aws configure sso`, un commit non poussé) : `mise run push` d'abord.
+
+Créer une identité : copier `examples/identity/` dans un nouveau repo privé, y
+mettre ses fichiers sous `home/` (`dot-` pour un point initial). Un repo privé
+demande que `git clone` y ait accès : `gh auth login` pour GitHub, `glab auth
+login --hostname <gitlab de l'entreprise>` ou une URL SSH avec une clé pour un
+GitLab d'entreprise. La synchronisation à l'ouverture de session ne demande
+jamais de mot de passe : sans accès, elle garde la version locale.
+
+`config.toml` ne doit définir aucune `[vars]` qu'une identité fixe : le fichier
+de base l'emporte sur `conf.d/`.
+
 ## Installer
 
 | Machine | Comment |
 |---|---|
-| WSL | `git clone https://github.com/Deltamir/dotfiles ~/dotfiles && ~/dotfiles/install.sh` |
+| WSL | `git clone https://github.com/Deltamir/dotfiles ~/dotfiles && ~/dotfiles/install.sh --identity <url>` |
 | Devcontainers | réglages VS Code (utilisateur) ci-dessous : clone et lancement à chaque création de conteneur |
 | VM Sarasvati | le rôle `dotfiles` de Sarasvati clone le repo et lance `install.sh` |
 
@@ -62,9 +98,9 @@ dans sa copie du repo jusqu'à `mise run push`.
 | Situation | Quoi faire |
 |---|---|
 | Modifier `~/.zshrc`, un alias de `~/.zsh-custom/` | c'est un lien : tu modifies le fichier du repo ; `mise run push` pour le publier |
-| Une appli réécrit sa config (`~/.config/gh/config.yml`, `~/.aws/config`) | fichiers en `copy` : rapatriés dans `home/` par `mise run push` (ou `mise dot add --changed`) et à chaque synchronisation |
-| Publier les changements de cette machine | `mise run push` : diff complet, scan gitleaks (le moindre résultat arrête tout), confirmation, commit au nom de la machine, `pull --rebase`, push |
-| Récupérer les changements faits ailleurs | automatique à l'ouverture de session si rien n'est modifié localement ; sinon `mise run push` d'abord |
+| Une appli réécrit sa config (`~/.config/gh/config.yml`, `~/.aws/config` de l'identité) | fichiers en `copy` : rapatriés dans leur repo (celui-ci ou celui de l'identité) par `mise run push` (ou `mise dot add --changed`) et à chaque synchronisation |
+| Publier les changements de cette machine | `mise run push` : pour ce repo puis celui de l'identité, diff complet, scan gitleaks (le moindre résultat arrête tout), confirmation, commit au nom de la machine (auteur : l'identité), `pull --rebase`, push |
+| Récupérer les changements faits ailleurs | automatique à l'ouverture de session (les deux repos) si rien n'est modifié localement ; sinon `mise run push` d'abord |
 | Suivre un nouveau fichier | l'ajouter dans `home/` et une ligne dans `[dotfiles]` de `config/mise/config.toml` |
 | Ajouter un outil | une ligne dans `[tools]`, une vérification dans `[tasks.bootstrap]` |
 | Voir ce qui diverge | `mise dot status`, `mise bootstrap status` |
@@ -80,7 +116,7 @@ Déclarées dans `config.toml` (`[bootstrap.linux.systemd.units]`) et posées pa
 
 | Unité | Quand | Quoi |
 |---|---|---|
-| `dev.mise.dotfiles-sync.service` | ouverture de session | `install.sh --sync` : `git pull --ff-only` seulement si la copie locale n'a aucune modification, puis applique la config. Délai de 20 s sur le réseau ; une erreur est journalisée et la session continue avec la version locale |
+| `dev.mise.dotfiles-sync.service` | ouverture de session | `install.sh --sync` : `git pull --ff-only` de ce repo et du repo d'identité, chacun seulement si sa copie locale n'a aucune modification, puis applique la config. Délai de 20 s sur le réseau ; une erreur est journalisée et la session continue avec la version locale |
 | `dev.mise.mise-upgrade-weekly.timer` | chaque semaine (rattrapé au démarrage si la machine était éteinte) | `mise upgrade` des outils de `[tools]` |
 
 Journal : `~/.local/state/dotfiles/install.log`, et
@@ -143,8 +179,9 @@ paquets.
 - **`~/.config/gh/hosts.yml` n'est plus versionné** : gh y écrit le token
   quand aucun trousseau n'est disponible, ce qui est le cas sur WSL et dans les
   conteneurs. `gh auth login` le recrée.
-- **`~/.aws/config` est versionné** (choix assumé) : profils SSO et IDs de
-  comptes publics, pas de secret. `~/.aws/credentials` reste ignoré.
+- **`~/.aws/config` est dans le repo d'identité**, privé : profils SSO et IDs
+  de comptes. Il a été public ici jusqu'à l'arrivée des identités et reste dans
+  l'historique Git de ce repo. `~/.aws/credentials` reste ignoré partout.
 - **Pas de changement du shell de connexion** : `~/.bashrc` lance zsh dans les
   shells interactifs. Pour changer le shell de connexion : `chsh -s "$(command -v zsh)"`.
 
@@ -153,8 +190,10 @@ paquets.
 `ci.yml` lance `install.sh` deux fois dans quatre conteneurs : `debian:stable`,
 `kalilinux/kali-rolling`, `mcr.microsoft.com/devcontainers/base:debian` (compte
 `vscode`) et Debian sans sudo. Le second passage ne doit rien changer. Le
-test vérifie aussi les liens, le rendu du template, les droits de
-`~/.aws/config`, la sauvegarde du `~/.bashrc` d'origine, l'absence de chemin de
+test vérifie aussi les liens, le rendu du template, l'identité (fichiers,
+droits de `~/.aws/config`, auteur Git ; changement refusé tant qu'une réécriture
+n'est pas publiée, publication dans le repo d'identité, passage de perso à pro
+sans aucun reste, `--identity none`), la sauvegarde du `~/.bashrc` d'origine, l'absence de chemin de
 home en dur et, dans zsh, que les outils de mise sont dans le PATH, le prompt et
 les comportements de Kali. Sur Debian, Kali et le devcontainer, il joue aussi la
 synchronisation et la publication contre un dépôt local qui tient lieu de

@@ -1,7 +1,3 @@
-[user]
-	name = Deltamir
-	email = {{ vars.git_email }}
-
 # gh and glab come from mise: its shims directory has a stable path, unlike
 # the versioned install directories (the old glab/1.79.0 path broke on upgrade).
 [credential "https://github.com"]
@@ -18,3 +14,9 @@
     diff = auto
     status = auto
     branch = auto
+
+# Who you are (name, email) and per-employer settings (a company GitLab's
+# credential helper...): from the identity repository. Last, so it wins; git
+# skips a missing include, so a machine without identity still works.
+[include]
+	path = ~/.gitconfig.identity
