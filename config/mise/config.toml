@@ -116,9 +116,6 @@ claude = "latest"       # Claude Code, Anthropic's release binary
 # `check` of Sarasvati tools. A failure fails install.sh.
 [tasks.bootstrap]
 description = "Check that every common tool answers"
-# From the home, whatever directory install.sh runs in: glab, for one, fails
-# where .git is a file (a worktree or submodule) instead of a directory.
-dir = "{{ env.HOME }}"
 run = [
   "gh --version",
   "glab --version",
