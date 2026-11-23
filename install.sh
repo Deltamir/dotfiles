@@ -3,16 +3,29 @@
 # (dotfiles.installCommand), WSL by hand, the Sarasvati VM. Re-running it only
 # changes what differs from the config.
 #
-#   ./install.sh          install or update; any error is fatal
-#   ./install.sh --sync   at login (dotfiles-sync unit): pull the repository first
-#                         when nothing is modified locally; never fails the login,
-#                         a network error is logged and the local version is kept
+#   ./install.sh                   install or update; any error is fatal
+#   ./install.sh --identity <url>  also use this identity repository (see below);
+#                                  replaces the current one, if any
+#   ./install.sh --identity none   drop the identity layer
+#   ./install.sh --sync            at login (dotfiles-sync unit): pull the
+#                                  repositories first when nothing is modified
+#                                  locally; never fails the login, a network
+#                                  error is logged and the local version is kept
 #
 # What it does:
 #   1. install mise (pinned version, checksum verified) into ~/.local/bin
 #   2. link ~/.dotfiles -> this repository, ~/.config/mise -> config/mise
-#   3. mise bootstrap: apt packages (only with passwordless sudo), Oh My Zsh,
+#   3. identity layer: clone or swap the identity repository
+#   4. mise bootstrap: apt packages (only with passwordless sudo), Oh My Zsh,
 #      files, tools, then the checks of [tasks.bootstrap]
+#
+# Identity layer: who you are on this machine (Git name and email, AWS
+# profiles, work-only tools), kept out of this public repository. A Git
+# repository with a mise.toml at its root, cloned to IDENTITY_DIR, linked as
+# ~/.dotfiles-identity, its mise.toml linked into config/mise/conf.d/ where mise
+# merges it with config.toml. Its files form the dotfile group "identity", so
+# swapping identities removes the previous one's files (`mise dot unapply
+# --group identity`) before the next one is applied. See README.md.
 # Log: ~/.local/state/dotfiles/install.log
 set -euo pipefail
 
@@ -25,10 +38,23 @@ declare -A MISE_SHA256=(
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles"
 BIN="$HOME/.local/bin"
-MODE="${1:-install}"
+IDENTITY_DIR="$HOME/.local/share/dotfiles-identity"
+IDENTITY_LINK="$HOME/.dotfiles-identity"
+IDENTITY_CONF="$REPO/config/mise/conf.d/identity.toml"
 mkdir -p "$STATE" "$BIN"
 
 log() { echo "[dotfiles] $*"; }
+usage() { echo "usage: $0 [--identity <git url>|none] | --sync" >&2; exit 2; }
+
+MODE=install
+IDENTITY=""   # empty: keep the current identity
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --identity) [ $# -ge 2 ] && [ -n "$2" ] || usage; IDENTITY="$2"; shift 2 ;;
+    --sync | --sync-run | --sync-pulled) MODE="$1"; shift ;;
+    *) usage ;;
+  esac
+done
 
 case "$MODE" in
   install | --sync-run | --sync-pulled) ;;
@@ -40,7 +66,6 @@ case "$MODE" in
     [ "$rc" -eq 0 ] || log "sync failed (exit $rc): the local version stays in place, see $STATE/install.log"
     exit 0
     ;;
-  *) echo "usage: $0 [--sync]" >&2; exit 2 ;;
 esac
 
 # Once per run: the --sync-run -> --sync-pulled exec keeps the same log pipe.
@@ -62,13 +87,20 @@ if [ "$MODE" = --sync-run ]; then
   if command -v mise >/dev/null 2>&1; then
     mise dot add --changed --yes || log "could not capture rewritten copies"
   fi
-  if [ -n "$(git -C "$REPO" status --porcelain)" ]; then
-    log "local changes in $REPO: pull skipped (publish them with: mise run push)"
-  elif timeout 20 git -C "$REPO" pull --ff-only -q; then
-    log "pulled $(git -C "$REPO" log -1 --format='%h %s')"
-  else
-    log "pull failed or not a fast-forward: keeping the local version"
-  fi
+  # No credential prompt at login: a private identity repository without
+  # stored credentials is skipped like an unreachable one.
+  export GIT_TERMINAL_PROMPT=0
+  pull() {
+    if [ -n "$(git -C "$1" status --porcelain)" ]; then
+      log "local changes in $1: pull skipped (publish them with: mise run push)"
+    elif timeout 20 git -C "$1" pull --ff-only -q; then
+      log "pulled $1: $(git -C "$1" log -1 --format='%h %s')"
+    else
+      log "pull of $1 failed or not a fast-forward: keeping the local version"
+    fi
+  }
+  pull "$REPO"
+  if [ -d "$IDENTITY_DIR/.git" ]; then pull "$IDENTITY_DIR"; fi
   # install.sh itself may have changed: bash reads a script while running it,
   # so continue in a fresh process on the pulled file.
   exec "$REPO/install.sh" --sync-pulled
@@ -126,7 +158,49 @@ fi
 link "$HOME/.dotfiles" "$REPO"
 link "${XDG_CONFIG_HOME:-$HOME/.config}/mise" "$REPO/config/mise"
 
-# --- 3. bootstrap ---------------------------------------------------------------
+# --- 3. identity layer -------------------------------------------------------------
+identity_url() { git -C "$IDENTITY_DIR" remote get-url origin 2>/dev/null || true; }
+
+# Remove the current identity: its files, its clone, its links. Refused while
+# it holds work that exists nowhere else: an application's rewrite of a copied
+# file (captured first), a commit not pushed.
+drop_identity() {
+  [ -d "$IDENTITY_DIR" ] || { rm -f "$IDENTITY_LINK" "$IDENTITY_CONF"; return 0; }
+  mise dot add --changed --yes >/dev/null || true
+  local dirty ahead
+  dirty="$(git -C "$IDENTITY_DIR" status --porcelain)"
+  ahead="$(git -C "$IDENTITY_DIR" rev-list --count '@{u}..HEAD' 2>/dev/null || echo 0)"
+  if [ -n "$dirty" ] || [ "$ahead" != 0 ]; then
+    echo "The identity $(identity_url) holds changes not published:" >&2
+    git -C "$IDENTITY_DIR" status --short >&2
+    echo "Publish them (mise run push) or discard them in $IDENTITY_DIR, then run again." >&2
+    exit 1
+  fi
+  log "removing the identity $(identity_url)"
+  mise dot unapply --group identity --force --yes
+  rm -f "$IDENTITY_LINK" "$IDENTITY_CONF"
+  rm -rf "$IDENTITY_DIR"
+}
+
+if [ -n "$IDENTITY" ] && [ "$IDENTITY" != "$(identity_url)" ]; then
+  drop_identity
+  if [ "$IDENTITY" != none ]; then
+    log "cloning the identity $IDENTITY"
+    git clone -q "$IDENTITY" "$IDENTITY_DIR"
+    if [ ! -f "$IDENTITY_DIR/mise.toml" ]; then
+      rm -rf "$IDENTITY_DIR"
+      echo "$IDENTITY has no mise.toml at its root: not an identity repository." >&2
+      exit 1
+    fi
+  fi
+fi
+if [ -d "$IDENTITY_DIR" ]; then
+  link "$IDENTITY_LINK" "$IDENTITY_DIR"
+  mkdir -p "$(dirname "$IDENTITY_CONF")"
+  link "$IDENTITY_CONF" "$IDENTITY_LINK/mise.toml"
+fi
+
+# --- 4. bootstrap ---------------------------------------------------------------
 args=(--yes --force-dotfiles)
 if [ "$MODE" = --sync-pulled ]; then
   # Applying the units from inside dotfiles-sync would stop dotfiles-sync.
@@ -159,6 +233,6 @@ done < <(conflicts)
 
 mise bootstrap "${args[@]}"
 
-# --- 4. verify ------------------------------------------------------------------
+# --- 5. verify ------------------------------------------------------------------
 mise dot status --missing
 log "done"

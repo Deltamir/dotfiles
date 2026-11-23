@@ -20,3 +20,5 @@ id_ed25519*
 *.swp
 *.tmp
 .DS_Store
+# The identity layer's link (install.sh --identity): per machine
+config/mise/conf.d/

@@ -1,0 +1,21 @@
+# Identity layer template: copy this directory into a new private repository
+# (personal, work...). The dotfiles repository uses it on top of its config:
+#
+#   ~/dotfiles/install.sh --identity <url of the new repository>
+#
+# install.sh clones this repository to ~/.local/share/dotfiles-identity, links
+# it as ~/.dotfiles-identity, and links this file into the mise config's
+# conf.d/, where mise merges it. Swapping identities removes these files first
+# (`mise dot unapply --group identity`): keep everything in this group.
+
+# home/ mirrors the home directory: dot-<name> is deployed as .<name>.
+[dotfile_groups.identity]
+root = "~/.dotfiles-identity/home"
+target = "~"
+mode = "symlink-each"
+dot_prefix = true
+
+# Files an application rewrites are copies, not links: `mise run push` brings
+# the rewrite back here (aws configure sso writes ~/.aws/config).
+[dotfile_groups.identity.entries]
+"~/.aws/config" = { mode = "copy", permissions = "0600" }

@@ -1,10 +1,11 @@
 # Global mise config for every machine: WSL, devcontainers, the Sarasvati VM.
 # install.sh links ~/.config/mise to this directory and ~/.dotfiles to the
-# repository, then runs `mise bootstrap`. No per-context file: what belongs
-# to one machine only goes in config.local.toml next to this file (ignored by Git).
-
-[vars]
-git_email = "deltamir@hotmail.fr"
+# repository, then runs `mise bootstrap`. Nothing here says who you are: Git
+# name and email, AWS profiles and other per-person or per-employer files come
+# from the identity repository (install.sh --identity), whose mise.toml is
+# linked into conf.d/ and merged with this file. What belongs to one machine
+# only goes in config.local.toml next to this file. Both are ignored by Git.
+# Do not define [vars] an identity would set: this file wins over conf.d/.
 
 # --- System packages (apt: Debian, Ubuntu, Kali) ------------------------------
 # Installed with passwordless sudo, or with a password when install.sh runs in
@@ -90,7 +91,6 @@ Unattended-Upgrade::Origins-Pattern {
 "~/.zsh-custom" = { source = "~/.dotfiles/home/zsh", mode = "symlink-each" }
 "~/.gitconfig" = { source = "~/.dotfiles/home/gitconfig.tmpl", mode = "template" }
 "~/.config/gh/config.yml" = { source = "~/.dotfiles/home/config/gh/config.yml", mode = "copy" }
-"~/.aws/config" = { source = "~/.dotfiles/home/aws/config", mode = "copy", permissions = "0600" }
 
 # --- Tools -----------------------------------------------------------------------
 # What Homebrew used to install, now from mise. "latest" tracks upstream;
@@ -134,43 +134,53 @@ run = [
 ]
 
 # --- Publishing changes ------------------------------------------------------------
-# `mise run push`: the only way a change leaves this machine. Brings back the
-# copies an application rewrote, shows the full diff, scans it for secrets
-# (any finding stops everything), asks, then commits and pushes.
+# `mise run push`: the only way a change leaves this machine, for this
+# repository then the identity's. Brings back the copies an application
+# rewrote, shows the full diff, scans it for secrets (any finding stops
+# everything), asks, then commits and pushes. Commits carry the identity's
+# Git name and email.
 [tasks.push]
 description = "Review, scan and publish the local dotfiles changes"
-dir = "{{ env.HOME }}/.dotfiles"
+dir = "{{ env.HOME }}"
 raw = true
 run = '''
 set -eu
+# Copies an application rewrote go back to their repository (this one or the
+# identity's) first.
 mise dot add --changed --yes
-git add -A
-if git diff --cached --quiet; then
-  echo "Nothing to publish."
-  exit 0
-fi
-git --no-pager diff --cached
-echo
-git --no-pager diff --cached --stat
-if ! gitleaks git --staged --pre-commit --redact --no-banner .; then
-  echo "gitleaks found a possible secret: nothing was committed. Fix it, then run again." >&2
-  git reset -q
-  exit 1
-fi
-printf 'Commit and push these changes? [y/N] '
-read -r answer
-case "$answer" in
-  y | Y | yes | o | oui) ;;
-  *) echo "Cancelled; the changes stay staged."; exit 1 ;;
-esac
-git commit -q -m "dotfiles: changes from $(hostname)"
-if ! git pull --rebase -q; then
-  echo "Another machine changed the same lines. Resolve in ~/.dotfiles (git status)," >&2
-  echo "then: git rebase --continue && git push" >&2
-  exit 1
-fi
-git push -q
-echo "Published."
+publish() {
+  cd "$1"
+  git add -A
+  if git diff --cached --quiet; then
+    echo "$1: nothing to publish."
+    return 0
+  fi
+  echo "===== $1"
+  git --no-pager diff --cached
+  echo
+  git --no-pager diff --cached --stat
+  if ! gitleaks git --staged --pre-commit --redact --no-banner .; then
+    echo "gitleaks found a possible secret in $1: nothing was committed. Fix it, then run again." >&2
+    git reset -q
+    exit 1
+  fi
+  printf 'Commit and push these changes to %s? [y/N] ' "$(git remote get-url origin)"
+  read -r answer
+  case "$answer" in
+    y | Y | yes | o | oui) ;;
+    *) echo "Cancelled; the changes stay staged."; exit 1 ;;
+  esac
+  git commit -q -m "dotfiles: changes from $(hostname)"
+  if ! git pull --rebase -q; then
+    echo "Another machine changed the same lines. Resolve in $1 (git status)," >&2
+    echo "then: git rebase --continue && git push" >&2
+    exit 1
+  fi
+  git push -q
+  echo "Published $1."
+}
+publish "$HOME/.dotfiles"
+if [ -d "$HOME/.dotfiles-identity/.git" ]; then publish "$HOME/.dotfiles-identity"; fi
 '''
 
 # --- Background jobs (systemd user units; skipped where there is no user manager,

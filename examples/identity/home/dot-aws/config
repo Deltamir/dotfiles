@@ -1,0 +1,4 @@
+# AWS profiles of this identity (SSO: no secret here; `aws configure sso`
+# rewrites this file, `mise run push` publishes the rewrite).
+[profile example]
+region = eu-west-3

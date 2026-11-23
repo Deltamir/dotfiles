@@ -40,19 +40,38 @@ git -C /tmp/seed init -q -b main && git -C /tmp/seed add -A
 git -C /tmp/seed -c user.name=ci -c user.email=ci@example.invalid commit -qm seed
 git clone -q --bare /tmp/seed /srv/origin.git && chown -R "$U:" /srv/origin.git
 su - "$U" -c "git clone -q /srv/origin.git ~/dotfiles"
-run() { su - "$U" -c "cd ~ && ./dotfiles/install.sh"; }
-echo "##### run 1"; run
+# Two identity repositories made from the template (examples/identity), as a
+# personal one on GitHub and a work one on a company GitLab would be.
+identity() {
+  d=/tmp/identity-$1
+  cp -r /src/examples/identity "$d"
+  sed -i "s/Your Name/$1/; s/you@example.invalid/$1@example.invalid/" "$d/home/dot-gitconfig.identity"
+  sed -i "s/profile example/profile $1/" "$d/home/dot-aws/config"
+  [ "$1" = perso ] && echo "only in perso" > "$d/home/dot-perso-only"
+  git -C "$d" init -q -b main && git -C "$d" add -A
+  git -C "$d" -c user.name=ci -c user.email=ci@example.invalid commit -qm seed
+  git clone -q --bare "$d" "/srv/$1.git" && chown -R "$U:" "/srv/$1.git"
+}
+identity perso
+identity work
+run() { su - "$U" -c "cd ~ && ./dotfiles/install.sh $*"; }
+echo "##### run 1"; run --identity /srv/perso.git
 echo "##### run 2"; run 2>&1 | tee /tmp/run2.log
 echo "##### checks"
 fail() { echo "CHECK FAILED: $*"; exit 1; }
 # Idempotence: the second run must not change anything.
-if grep -E 'installing mise|linked |moved existing|created symlink|copied |rendered |Cloning|applied ~|Setting up ' /tmp/run2.log; then
+if grep -E 'installing mise|linked |moved existing|created symlink|symlink\(s\)|copied |rendered |Cloning|cloning|applied ~|Setting up ' /tmp/run2.log; then
   fail "second run changed something (lines above)"
 fi
 as() { su - "$U" -c "$1"; }
 as 'test -L ~/.zshrc && test -L ~/.zsh-custom/prompt.zsh && test -f ~/.oh-my-zsh/oh-my-zsh.sh' || fail "files"
 as 'grep -q "$HOME/.local/share/mise/shims/gh auth" ~/.gitconfig' || fail "gitconfig template"
+# The identity layer: its files, merged config, Git identity through the include.
 as 'test "$(stat -c %a ~/.aws/config)" = 600' || fail "aws config permissions"
+as 'grep -q "profile perso" ~/.aws/config && test -L ~/.perso-only' || fail "identity files"
+as 'test "$(git config user.email)" = perso@example.invalid' || fail "Git identity from the identity layer"
+as 'test -L ~/.dotfiles-identity && test -L ~/.dotfiles/config/mise/conf.d/identity.toml' || fail "identity links"
+as 'test -z "$(git -C ~/dotfiles status --porcelain)"' || fail "identity link shows in the dotfiles checkout"
 # The original ~/.bashrc from /etc/skel is kept, not overwritten.
 as 'ls ~/.local/state/dotfiles/backup/*/.bashrc' || fail "backup of the original ~/.bashrc"
 as 'grep -rnE "(^|[[:space:]\"=:!])/(home|root)/" ~/.dotfiles/home ~/.dotfiles/config' && fail "hard-coded home path"
@@ -141,6 +160,31 @@ if [ "$MODE" = sudo ]; then
   as '~/dotfiles/install.sh --sync' >/tmp/sync4.log 2>&1 || fail "offline sync must exit 0"
   [ $(( $(date +%s) - start )) -lt 120 ] || fail "offline sync too slow"
   grep -q "keeping the local version" /tmp/sync4.log || fail "offline sync message"
+
+  echo "##### identity swap"
+  # aws configure sso rewrites ~/.aws/config: swapping identities is refused
+  # while that rewrite is not published, then `mise run push` publishes it to
+  # the identity repository.
+  as 'echo "# set by aws" >> ~/.aws/config'
+  as 'cd ~ && ./dotfiles/install.sh --identity /srv/work.git' >/tmp/swap1.log 2>&1 && fail "swap accepted unpublished changes"
+  grep -q "not published" /tmp/swap1.log || { cat /tmp/swap1.log; fail "no unpublished-changes message"; }
+  as 'grep -q "profile perso" ~/.aws/config' || fail "refused swap changed the files"
+  as 'cd ~ && printf "y\ny\n" | mise run push' >/tmp/push3.log 2>&1 || { cat /tmp/push3.log; fail "identity push"; }
+  git -C /srv/perso.git show main:home/dot-aws/config | grep -q "set by aws" || fail "identity change not published"
+  git -C /srv/perso.git log -1 --format=%ae main | grep -qx perso@example.invalid || fail "identity commit author"
+
+  # Swap: nothing of perso is left, work is in place.
+  as 'cd ~ && ./dotfiles/install.sh --identity /srv/work.git' >/tmp/swap2.log 2>&1 || { cat /tmp/swap2.log; fail "swap"; }
+  as 'grep -q "profile work" ~/.aws/config && ! grep -q perso ~/.aws/config' || fail "work aws config"
+  as 'test ! -e ~/.perso-only' || fail "perso file left after the swap"
+  as 'test "$(git config user.email)" = work@example.invalid' || fail "work Git identity"
+  as 'test "$(stat -c %a ~/.aws/config)" = 600' || fail "work aws config permissions"
+
+  # No identity: the shell and tools stay, no one's files remain.
+  as 'cd ~ && ./dotfiles/install.sh --identity none' >/tmp/swap3.log 2>&1 || { cat /tmp/swap3.log; fail "identity none"; }
+  as 'test ! -e ~/.aws/config && test ! -e ~/.gitconfig.identity && test ! -e ~/.dotfiles-identity' || fail "identity files left"
+  as 'test -z "$(git config user.email || true)"' || fail "Git identity left"
+  as 'test -L ~/.zshrc && grep -q "shims/gh auth" ~/.gitconfig' || fail "base dotfiles lost with the identity"
 fi
 
 echo "ALL CHECKS PASSED ($MODE, $U)"
