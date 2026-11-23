@@ -137,7 +137,7 @@ if [ "$(id -u)" -eq 0 ] || sudo -n true 2>/dev/null; then
 elif [ -t 0 ]; then
   log "sudo needs a password: system packages included, sudo will ask for it"
 else
-  args+=(--skip packages)
+  args+=(--skip packages --skip files)
   log "no passwordless sudo: system packages skipped."
   log "  install them with: mise bootstrap packages apply   (asks for your password)"
 fi
