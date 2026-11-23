@@ -89,7 +89,7 @@ Unattended-Upgrade::Origins-Pattern {
 "~/.bash_logout" = "~/.dotfiles/home/bash_logout"
 "~/.profile" = "~/.dotfiles/home/profile"
 "~/.zsh-custom" = { source = "~/.dotfiles/home/zsh", mode = "symlink-each" }
-"~/.gitconfig" = { source = "~/.dotfiles/home/gitconfig.tmpl", mode = "template" }
+"~/.config/git/config" = { source = "~/.dotfiles/home/gitconfig.tmpl", mode = "template" }
 "~/.config/gh/config.yml" = { source = "~/.dotfiles/home/config/gh/config.yml", mode = "copy" }
 
 # --- Tools -----------------------------------------------------------------------
