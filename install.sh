@@ -322,9 +322,11 @@ mise bootstrap "${args[@]}"
 
 # Certificates an identity puts in /usr/local/share/ca-certificates (a company
 # root CA) only count once the system bundle is rebuilt.
-if [ "$system" = 1 ] && [ -d /usr/local/share/ca-certificates ] && command -v update-ca-certificates >/dev/null \
+# (/usr/sbin is not in a user's PATH on Debian.)
+update_ca=/usr/sbin/update-ca-certificates
+if [ "$system" = 1 ] && [ -d /usr/local/share/ca-certificates ] && [ -x "$update_ca" ] \
   && [ -n "$(find /usr/local/share/ca-certificates -name '*.crt' -newer /etc/ssl/certs/ca-certificates.crt 2>/dev/null)" ]; then
-  if [ "$(id -u)" -eq 0 ]; then update-ca-certificates >/dev/null; else sudo update-ca-certificates >/dev/null; fi
+  if [ "$(id -u)" -eq 0 ]; then "$update_ca" >/dev/null; else sudo "$update_ca" >/dev/null; fi
   log "system CA bundle rebuilt (new certificate in /usr/local/share/ca-certificates)"
 fi
 
