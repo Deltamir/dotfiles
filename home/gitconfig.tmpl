@@ -2,6 +2,13 @@
 # ~/.gitconfig, read after this file, holds only [user]: install.sh writes the
 # identity's there, and VS Code copies it into devcontainers, which have no
 # identity. Nothing machine-specific goes there, so that copy works anywhere.
+{#- gh and glab as credential helpers on machines with an identity only (WSL,
+    the Sarasvati VM): you log in there. A devcontainer has no identity and
+    its gh is not logged in: VS Code's own helper, which forwards the host's
+    credentials, must keep handling GitHub and GitLab ("helper =" below would
+    clear it for those URLs). -#}
+{% set has_identity = exec(command="test -d \"$HOME/.dotfiles-identity/\" && echo yes || true") | trim -%}
+{% if has_identity == "yes" -%}
 # gh and glab come from mise: its shims directory has a stable path, unlike
 # the versioned install directories (the old glab/1.79.0 path broke on upgrade).
 [credential "https://github.com"]
@@ -13,6 +20,7 @@
 [credential "https://gitlab.com"]
 	helper =
 	helper = !{{ env.HOME }}/.local/share/mise/shims/glab auth git-credential
+{% endif %}
 
 [color]
     diff = auto
