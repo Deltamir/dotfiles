@@ -54,6 +54,18 @@ jamais de mot de passe : sans accès, elle garde la version locale.
 `config.toml` ne doit définir aucune `[vars]` qu'une identité fixe : le fichier
 de base l'emporte sur `conf.d/`.
 
+Une identité peut aussi déclarer des outils (`[tools]`), des paquets et sources
+apt, des fichiers système (`[bootstrap.files]`, par exemple le certificat
+racine de l'entreprise dans `/usr/local/share/ca-certificates/`) et des
+variables (`[env]`) : mise fusionne ces sections avec la base. Exemples
+commentés dans `examples/identity/mise.toml`. Après `mise bootstrap`,
+`install.sh` reconstruit le magasin de certificats du système si un certificat
+y est plus récent. Avant, il s'arrête si une source apt déclarée par les
+dotfiles est déjà définie dans un autre fichier (installée à la main, ou par le
+playbook Sarasvati) : deux définitions avec des clés différentes bloquent apt
+entièrement. Il nomme le fichier à retirer. Un certificat posé par une identité
+reste en place si on change d'identité.
+
 Git : la config commune (include de l'identité, et les helpers gh/glab sur
 les machines qui ont une identité seulement : dans un devcontainer, c'est le
 helper de VS Code qui transmet les identifiants de l'hôte) est

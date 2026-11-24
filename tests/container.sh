@@ -170,6 +170,22 @@ if [ "$MODE" = sudo ]; then
   [ $(( $(date +%s) - start )) -lt 120 ] || fail "offline sync too slow"
   grep -q "keeping the local version" /tmp/sync4.log || fail "offline sync message"
 
+  echo "##### apt source declared twice, company CA"
+  # A source the dotfiles declare, also defined by hand: install.sh stops
+  # before apt is broken by a second definition, and says which file.
+  echo "deb https://packages.cloud.google.com/apt cloud-sdk main" > /etc/apt/sources.list.d/google-cloud-sdk.list
+  as 'cd ~ && ./dotfiles/install.sh' >/tmp/dup.log 2>&1 && fail "install.sh went on with a duplicate apt source"
+  grep -q "google-cloud-sdk.list" /tmp/dup.log || { cat /tmp/dup.log; fail "no message naming the duplicate source"; }
+  rm /etc/apt/sources.list.d/google-cloud-sdk.list
+  # A certificate dropped in /usr/local/share/ca-certificates (by an identity's
+  # [bootstrap.files]) gets into the system bundle.
+  cp "$(find /usr/share/ca-certificates -name '*.crt' | head -1)" /usr/local/share/ca-certificates/company-test.crt
+  as 'cd ~ && ./dotfiles/install.sh' >/tmp/ca.log 2>&1 || { cat /tmp/ca.log; fail "install.sh with a new certificate"; }
+  grep -q "CA bundle rebuilt" /tmp/ca.log || fail "CA bundle not rebuilt"
+  test -e /etc/ssl/certs/company-test.pem || fail "certificate not in /etc/ssl/certs"
+  as 'cd ~ && ./dotfiles/install.sh' 2>&1 | grep -q "CA bundle rebuilt" && fail "CA bundle rebuilt again with nothing new"
+  rm /usr/local/share/ca-certificates/company-test.crt && update-ca-certificates --fresh >/dev/null
+
   echo "##### identity swap"
   # aws configure sso rewrites ~/.aws/config: swapping identities is refused
   # while that rewrite is not published, then `mise run push` publishes it to

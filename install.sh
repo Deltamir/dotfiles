@@ -246,6 +246,61 @@ else
   log "no passwordless sudo: system packages skipped."
   log "  install them with: mise bootstrap packages apply   (asks for your password)"
 fi
+system=1
+case " ${args[*]} " in *" --skip packages "*) system=0 ;; esac
+
+# An apt source these dotfiles declare (base or identity) that the machine
+# already has under another file (installed by hand, or by Sarasvati's
+# playbook) would make two definitions with different keys: apt then refuses
+# to read any source. Stop before mise adds the second one.
+apt_duplicates() {
+  # A fresh system without python3 has no hand-made source to clash with.
+  [ -d /etc/apt ] && command -v python3 >/dev/null || return 0
+  python3 -I - "$REPO/config/mise" <<'PY'
+import glob, os, re, sys
+try:
+    import tomllib
+except ImportError:
+    sys.exit(0)
+conf = sys.argv[1]
+declared = {}
+for path in [os.path.join(conf, "config.toml")] + sorted(glob.glob(os.path.join(conf, "conf.d", "*.toml"))):
+    try:
+        with open(path, "rb") as f:
+            sources = tomllib.load(f).get("bootstrap", {}).get("apt", {}).get("sources", {})
+    except (OSError, ValueError):
+        continue
+    for name, src in sources.items():
+        uris = src.get("uris", [])
+        for uri in ([uris] if isinstance(uris, str) else uris):
+            declared[uri.rstrip("/")] = name
+files = ["/etc/apt/sources.list"] + glob.glob("/etc/apt/sources.list.d/*.list") + glob.glob("/etc/apt/sources.list.d/*.sources")
+for f in files:
+    base = os.path.basename(f)
+    try:
+        text = open(f).read()
+    except OSError:
+        continue
+    lines = [l for l in text.splitlines() if l.strip() and not l.lstrip().startswith("#")]
+    for uri, name in declared.items():
+        if base == f"mise-{name}.sources":
+            continue
+        if any(re.search(r"(^|\s|=)" + re.escape(uri) + r"/?(\s|$)", l) for l in lines):
+            print(f"{f}\t{uri}\t{name}")
+PY
+}
+if [ "$system" = 1 ]; then
+  dups="$(apt_duplicates)"
+  if [ -n "$dups" ]; then
+    echo "These apt sources are declared by the dotfiles and already defined by another file:" >&2
+    while IFS=$'\t' read -r file uri name; do
+      echo "  $uri ($name): $file" >&2
+    done <<<"$dups"
+    echo "Two definitions with different keys stop apt altogether. Remove the other file" >&2
+    echo "(sudo rm <file>), or the declaration, then run again. Nothing was changed." >&2
+    exit 1
+  fi
+fi
 
 
 # Real files where mise puts links (a fresh ~/.bashrc from /etc/skel, a chezmoi
@@ -264,6 +319,16 @@ while IFS= read -r target; do
 done < <(conflicts)
 
 mise bootstrap "${args[@]}"
+
+# Certificates an identity puts in /usr/local/share/ca-certificates (a company
+# root CA) only count once the system bundle is rebuilt.
+# (/usr/sbin is not in a user's PATH on Debian.)
+update_ca=/usr/sbin/update-ca-certificates
+if [ "$system" = 1 ] && [ -d /usr/local/share/ca-certificates ] && [ -x "$update_ca" ] \
+  && [ -n "$(find /usr/local/share/ca-certificates -name '*.crt' -newer /etc/ssl/certs/ca-certificates.crt 2>/dev/null)" ]; then
+  if [ "$(id -u)" -eq 0 ]; then "$update_ca" >/dev/null; else sudo "$update_ca" >/dev/null; fi
+  log "system CA bundle rebuilt (new certificate in /usr/local/share/ca-certificates)"
+fi
 
 # --- 5. verify ------------------------------------------------------------------
 mise dot status --missing
