@@ -254,7 +254,8 @@ case " ${args[*]} " in *" --skip packages "*) system=0 ;; esac
 # playbook) would make two definitions with different keys: apt then refuses
 # to read any source. Stop before mise adds the second one.
 apt_duplicates() {
-  [ -d /etc/apt ] || return 0
+  # A fresh system without python3 has no hand-made source to clash with.
+  [ -d /etc/apt ] && command -v python3 >/dev/null || return 0
   python3 -I - "$REPO/config/mise" <<'PY'
 import glob, os, re, sys
 try:
